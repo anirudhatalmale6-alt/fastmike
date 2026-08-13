@@ -4,7 +4,23 @@ const fs = require('fs');
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tif', '.tiff']);
 
+const MIME = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.bmp': 'image/bmp',
+  '.webp': 'image/webp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff'
+};
+
 let win = null;
+
+// On a PC with broken or missing GPU drivers Chromium would otherwise hand out
+// a WebGL context that immediately dies. This lets it fall back to its software
+// renderer instead; the app has its own CPU path as a second line of defence.
+app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
 function createWindow() {
   win = new BrowserWindow({
@@ -19,6 +35,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // preload does no filesystem work of its own, so it can stay sandboxed
+      sandbox: true,
       // large event shoots: keep decoded bitmaps on the GPU
       backgroundThrottling: false
     }
@@ -58,6 +76,13 @@ ipcMain.handle('import:files', async () => {
   });
   if (res.canceled) return [];
   return res.filePaths.map((p) => ({ name: path.basename(p), path: p }));
+});
+
+/** Read one original off disk. Read-only - the source file is never written. */
+ipcMain.handle('image:read', async (_e, p) => {
+  const buf = await fs.promises.readFile(p);
+  const mime = MIME[path.extname(p).toLowerCase()] || 'image/jpeg';
+  return 'data:' + mime + ';base64,' + buf.toString('base64');
 });
 
 ipcMain.handle('import:folder', async () => {

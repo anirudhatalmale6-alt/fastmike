@@ -104,6 +104,14 @@ slider on a 24-megapixel file.
 Highlights and shadows are masked by luminance, so lifting shadows does not wash out
 a bright sky and pulling highlights down does not muddy the dark tones.
 
+There is a second, CPU implementation of exactly the same maths. A WebGL context can
+disappear at any time — a driver update, a laptop waking from sleep, a remote desktop
+session, or a PC with no usable GPU at all — and when it does, Chromium keeps accepting
+draw calls that quietly do nothing. That would mean blank previews and solid black
+prints with no error shown anywhere. FastMike detects the loss and switches to the CPU
+path, showing a "software rendering" badge next to the filename. Output is identical;
+a full 15×20 print render takes roughly 220 ms instead of 170 ms.
+
 When a photo is added to the print queue it is re-rendered through the same shader
 at full print resolution (1772 × 2362 px for 15×20 cm at 300 dpi), so the print is a
 true full-resolution render and not an upscaled preview.

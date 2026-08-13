@@ -1,16 +1,13 @@
-const { contextBridge, ipcRenderer } = require('electron');
-const fs = require('fs');
-const path = require('path');
+/* The only bridge between the UI and the machine.
+ *
+ * Deliberately no `require('fs')` here: Electron runs preload scripts in a
+ * sandbox by default, where node builtins are unavailable, and a preload that
+ * throws leaves the whole bridge undefined - the app silently falls back to
+ * browser mode with no printer list and no native file dialogs. Every
+ * filesystem operation goes through IPC to the main process instead.
+ */
 
-const MIME = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.bmp': 'image/bmp',
-  '.webp': 'image/webp',
-  '.tif': 'image/tiff',
-  '.tiff': 'image/tiff'
-};
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('fastmike', {
   isDesktop: true,
@@ -18,17 +15,23 @@ contextBridge.exposeInMainWorld('fastmike', {
   importFiles: () => ipcRenderer.invoke('import:files'),
   importFolder: () => ipcRenderer.invoke('import:folder'),
 
-  // read straight off disk - no copying, originals are never modified
-  readImage: (p) => {
-    const buf = fs.readFileSync(p);
-    const mime = MIME[path.extname(p).toLowerCase()] || 'image/jpeg';
-    return 'data:' + mime + ';base64,' + buf.toString('base64');
-  },
+  // reads straight off disk - originals are opened read-only, never written
+  readImage: (p) => ipcRenderer.invoke('image:read', p),
 
   pickExportFolder: () => ipcRenderer.invoke('export:pick-folder'),
   writeExport: (folder, name, dataUrl) =>
     ipcRenderer.invoke('export:write', { folder, name, dataUrl }),
 
   listPrinters: () => ipcRenderer.invoke('print:list'),
-  printImages: (payload) => ipcRenderer.invoke('print:images', payload)
+  printImages: (payload) => ipcRenderer.invoke('print:images', payload),
+
+  // Electron 32 removed File.path; this is the supported replacement and is
+  // what lets drag-and-drop use the on-disk file rather than a memory copy.
+  pathForFile: (file) => {
+    try {
+      return webUtils && webUtils.getPathForFile ? webUtils.getPathForFile(file) : null;
+    } catch (_) {
+      return null;
+    }
+  }
 });
