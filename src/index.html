@@ -9,44 +9,36 @@
 
 <header class="topbar">
   <div class="brand">Fast<span>Mike</span></div>
-
-  <div class="tools">
-    <button id="btnImportFiles" class="btn">Import Photos</button>
-    <button id="btnImportFolder" class="btn">Import Folder</button>
-    <span class="sep"></span>
-    <button id="btnCopy" class="btn">Copy Settings</button>
-    <button id="btnPasteAll" class="btn" disabled>Paste to All</button>
-    <span class="sep"></span>
-    <button id="btnAdd" class="btn btn-accent">Add to Print &crarr;</button>
-    <button id="btnPrint" class="btn btn-red">Print</button>
-  </div>
+  <div class="tagline">Edit fast. Print fast. Keep working.</div>
 
   <div class="topright">
     <label class="field">
       <span>Printer</span>
-      <select id="printerSelect"><option>System dialog</option></select>
+      <select id="printerSelect"><option>Loading&hellip;</option></select>
     </label>
-    <label class="field small">
-      <span>Copies</span>
-      <input id="copies" type="number" min="1" max="99" value="1">
+    <label class="check" title="Once the printer is set up for the event, jobs go straight to it with no dialog.">
+      <input type="checkbox" id="silentPrint" checked> Print without asking
     </label>
+    <button id="btnPrint" class="btn btn-red">Print</button>
   </div>
 </header>
 
 <main class="layout">
 
-  <!-- LEFT: originals -->
+  <!-- LEFT: actions + originals -->
   <aside class="panel originals">
+    <div class="panel-head"><h2>Actions</h2></div>
+    <div class="actions">
+      <button id="btnImportFiles" class="btn btn-accent wide">Import Photos</button>
+      <button id="btnImportFolder" class="btn wide">Import Folder</button>
+      <button id="btnClearAll" class="btn btn-ghost wide">Clear Session</button>
+    </div>
+
     <div class="panel-head">
       <h2>Original Photos</h2>
       <span id="origCount" class="count">0</span>
     </div>
-    <div id="originals" class="strip">
-      <div class="empty">
-        <p>No photos yet</p>
-        <button id="btnImportEmpty" class="btn btn-accent">Import Photos</button>
-      </div>
-    </div>
+    <div id="originals" class="strip"></div>
   </aside>
 
   <!-- CENTER -->
@@ -59,18 +51,20 @@
         <span class="c tl"></span><span class="c tr"></span>
         <span class="c bl"></span><span class="c br"></span>
       </div>
-      <div id="stageHint" class="stage-hint">Drag to move &nbsp;&middot;&nbsp; Scroll to zoom &nbsp;&middot;&nbsp; Double-click to fit</div>
+      <div id="stageHint" class="stage-hint">
+        Drag to move &nbsp;&middot;&nbsp; Wheel to zoom &nbsp;&middot;&nbsp;
+        Ctrl+Wheel brightness &nbsp;&middot;&nbsp; Alt+Wheel highlights
+      </div>
     </div>
 
     <div class="stage-bar">
       <div class="zoomctl">
         <button class="icobtn" id="zoomOut" title="Zoom out">&minus;</button>
-        <input id="zoom" type="range" min="100" max="400" value="100">
+        <input id="zoom" type="range" min="100" max="500" value="100" title="Zoom">
         <button class="icobtn" id="zoomIn" title="Zoom in">+</button>
-        <button class="icobtn" id="rotL" title="Rotate left">&#8634;</button>
-        <button class="icobtn" id="rotR" title="Rotate right">&#8635;</button>
         <button class="btn btn-ghost" id="btnFit">Fit</button>
       </div>
+      <button id="btnAdd" class="btn btn-accent">Add to Edited &crarr;</button>
       <div id="gpuNote" class="gpunote" hidden title="This PC has no usable graphics acceleration, so editing runs on the CPU. Output is identical, just slower.">software rendering</div>
       <div id="fileInfo" class="fileinfo">&mdash;</div>
     </div>
@@ -81,60 +75,57 @@
         <h2>Edited Photos</h2>
         <span id="editCount" class="count">0</span>
         <div class="head-tools">
-          <button id="btnSelectAll" class="btn btn-ghost">Select All</button>
           <button id="btnExport" class="btn btn-ghost">Export&hellip;</button>
           <button id="btnClearEdited" class="btn btn-ghost">Clear</button>
         </div>
       </div>
-      <div id="edited" class="edited-grid">
-        <div class="empty small"><p>Edited photos appear here &mdash; two rows of five</p></div>
-      </div>
+      <div id="edited" class="edited-grid"></div>
     </div>
   </section>
 
   <!-- RIGHT: adjustments -->
   <aside class="panel adjust">
     <div class="panel-head"><h2>Adjustments</h2></div>
+    <div class="sliders" id="sliders"></div>
 
-    <div class="sliders" id="sliders">
-      <!-- built by renderer.js -->
+    <div class="panel-head"><h2>Frame</h2></div>
+    <div class="framebox">
+      <button id="btnRotateFrame" class="btn wide">
+        <span class="rot-ico">&#8635;</span> Rotate Frame 90&deg;
+      </button>
+      <div class="frame-state">Format: <b id="frameFormat">15 &times; 20 portrait</b></div>
+      <p class="hint">The frame rotates, not the photograph.</p>
     </div>
 
-    <div class="adjust-foot">
-      <button id="btnResetAll" class="btn btn-ghost wide">Reset All</button>
-      <div class="copied" id="copiedTag" hidden>Settings copied</div>
-    </div>
-
-    <div class="panel-head"><h2>Output</h2></div>
-    <div class="outbox">
-      <label class="field">
-        <span>Print size</span>
-        <select id="printSize">
-          <option value="150x200">15 &times; 20 cm</option>
-          <option value="100x150">10 &times; 15 cm</option>
-          <option value="130x180">13 &times; 18 cm</option>
-          <option value="200x300">20 &times; 30 cm</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>Quality</span>
-        <select id="dpi">
-          <option value="300">300 dpi</option>
-          <option value="240">240 dpi</option>
-          <option value="200">200 dpi</option>
-        </select>
-      </label>
-      <label class="check">
-        <input type="checkbox" id="silentPrint"> Skip printer dialog
-      </label>
-    </div>
+    <div class="panel-head"><h2>Shortcuts</h2></div>
+    <ul class="keys">
+      <li><kbd>Ctrl</kbd>+<kbd>C</kbd><span>copy adjustments</span></li>
+      <li><kbd>Ctrl</kbd>+<kbd>V</kbd><span>paste onto this photo</span></li>
+      <li><kbd>Ctrl</kbd>+<kbd>Wheel</kbd><span>brightness</span></li>
+      <li><kbd>Alt</kbd>+<kbd>Wheel</kbd><span>highlights</span></li>
+      <li><kbd>Enter</kbd><span>add to edited, next photo</span></li>
+      <li><kbd>&uarr;</kbd><kbd>&darr;</kbd><span>previous / next photo</span></li>
+    </ul>
+    <div class="copied" id="copiedTag" hidden>Adjustments copied &mdash; Ctrl+V on the next photo</div>
   </aside>
 </main>
 
-<div id="toast" class="toast" hidden></div>
+<!-- batch print chooser -->
+<div id="modal" class="modal" hidden>
+  <div class="sheet">
+    <h3 id="modalTitle">Print</h3>
+    <div id="modalBody" class="sheet-body"></div>
+    <div class="sheet-foot"><button class="btn" data-close>Cancel</button></div>
+  </div>
+</div>
 
+<div id="toast" class="toast" hidden></div>
 <input id="webFilePicker" type="file" accept="image/*" multiple hidden>
 
-<script src="renderer.js"></script>
+<script src="engine.js"></script>
+<script src="crop.js"></script>
+<script src="photos.js"></script>
+<script src="printing.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

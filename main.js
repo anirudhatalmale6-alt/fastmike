@@ -114,6 +114,28 @@ ipcMain.handle('export:write', async (_e, { folder, name, dataUrl }) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Settings                                                            */
+/*                                                                     */
+/* The printer is configured once before an event and remembered, so   */
+/* the operator never picks it again while photos are going out.       */
+/* ------------------------------------------------------------------ */
+
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+
+ipcMain.handle('settings:get', async () => {
+  try {
+    return JSON.parse(await fs.promises.readFile(settingsFile(), 'utf8'));
+  } catch (_) {
+    return {};
+  }
+});
+
+ipcMain.handle('settings:set', async (_e, value) => {
+  await fs.promises.writeFile(settingsFile(), JSON.stringify(value, null, 2), 'utf8');
+  return true;
+});
+
+/* ------------------------------------------------------------------ */
 /* Print                                                               */
 /* ------------------------------------------------------------------ */
 

@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('fastmike', {
   writeExport: (folder, name, dataUrl) =>
     ipcRenderer.invoke('export:write', { folder, name, dataUrl }),
 
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSettings: (v) => ipcRenderer.invoke('settings:set', v),
+
   listPrinters: () => ipcRenderer.invoke('print:list'),
   printImages: (payload) => ipcRenderer.invoke('print:images', payload),
 
