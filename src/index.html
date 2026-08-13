@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FastMike</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">Fast<span>Mike</span></div>
+
+  <div class="tools">
+    <button id="btnImportFiles" class="btn">Import Photos</button>
+    <button id="btnImportFolder" class="btn">Import Folder</button>
+    <span class="sep"></span>
+    <button id="btnCopy" class="btn">Copy Settings</button>
+    <button id="btnPasteAll" class="btn" disabled>Paste to All</button>
+    <span class="sep"></span>
+    <button id="btnAdd" class="btn btn-accent">Add to Print &crarr;</button>
+    <button id="btnPrint" class="btn btn-red">Print</button>
+  </div>
+
+  <div class="topright">
+    <label class="field">
+      <span>Printer</span>
+      <select id="printerSelect"><option>System dialog</option></select>
+    </label>
+    <label class="field small">
+      <span>Copies</span>
+      <input id="copies" type="number" min="1" max="99" value="1">
+    </label>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- LEFT: originals -->
+  <aside class="panel originals">
+    <div class="panel-head">
+      <h2>Original Photos</h2>
+      <span id="origCount" class="count">0</span>
+    </div>
+    <div id="originals" class="strip">
+      <div class="empty">
+        <p>No photos yet</p>
+        <button id="btnImportEmpty" class="btn btn-accent">Import Photos</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER -->
+  <section class="center">
+
+    <div class="stage" id="stage">
+      <canvas id="preview"></canvas>
+      <div id="frame" class="crop-frame">
+        <div class="grid"></div>
+        <span class="c tl"></span><span class="c tr"></span>
+        <span class="c bl"></span><span class="c br"></span>
+      </div>
+      <div id="stageHint" class="stage-hint">Drag to move &nbsp;&middot;&nbsp; Scroll to zoom &nbsp;&middot;&nbsp; Double-click to fit</div>
+    </div>
+
+    <div class="stage-bar">
+      <div class="zoomctl">
+        <button class="icobtn" id="zoomOut" title="Zoom out">&minus;</button>
+        <input id="zoom" type="range" min="100" max="400" value="100">
+        <button class="icobtn" id="zoomIn" title="Zoom in">+</button>
+        <button class="icobtn" id="rotL" title="Rotate left">&#8634;</button>
+        <button class="icobtn" id="rotR" title="Rotate right">&#8635;</button>
+        <button class="btn btn-ghost" id="btnFit">Fit</button>
+      </div>
+      <div id="fileInfo" class="fileinfo">&mdash;</div>
+    </div>
+
+    <!-- BOTTOM: edited -->
+    <div class="panel edited">
+      <div class="panel-head">
+        <h2>Edited Photos</h2>
+        <span id="editCount" class="count">0</span>
+        <div class="head-tools">
+          <button id="btnSelectAll" class="btn btn-ghost">Select All</button>
+          <button id="btnExport" class="btn btn-ghost">Export&hellip;</button>
+          <button id="btnClearEdited" class="btn btn-ghost">Clear</button>
+        </div>
+      </div>
+      <div id="edited" class="edited-grid">
+        <div class="empty small"><p>Edited photos appear here &mdash; two rows of five</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: adjustments -->
+  <aside class="panel adjust">
+    <div class="panel-head"><h2>Adjustments</h2></div>
+
+    <div class="sliders" id="sliders">
+      <!-- built by renderer.js -->
+    </div>
+
+    <div class="adjust-foot">
+      <button id="btnResetAll" class="btn btn-ghost wide">Reset All</button>
+      <div class="copied" id="copiedTag" hidden>Settings copied</div>
+    </div>
+
+    <div class="panel-head"><h2>Output</h2></div>
+    <div class="outbox">
+      <label class="field">
+        <span>Print size</span>
+        <select id="printSize">
+          <option value="150x200">15 &times; 20 cm</option>
+          <option value="100x150">10 &times; 15 cm</option>
+          <option value="130x180">13 &times; 18 cm</option>
+          <option value="200x300">20 &times; 30 cm</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Quality</span>
+        <select id="dpi">
+          <option value="300">300 dpi</option>
+          <option value="240">240 dpi</option>
+          <option value="200">200 dpi</option>
+        </select>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="silentPrint"> Skip printer dialog
+      </label>
+    </div>
+  </aside>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<input id="webFilePicker" type="file" accept="image/*" multiple hidden>
+
+<script src="renderer.js"></script>
+</body>
+</html>
