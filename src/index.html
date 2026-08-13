@@ -19,6 +19,7 @@
     <label class="check" title="Once the printer is set up for the event, jobs go straight to it with no dialog.">
       <input type="checkbox" id="silentPrint" checked> Print without asking
     </label>
+    <span id="queueTag" class="queuetag" hidden></span>
     <button id="btnPrint" class="btn btn-red">Print</button>
   </div>
 </header>
@@ -95,6 +96,7 @@
       </button>
       <div class="frame-state">Format: <b id="frameFormat">15 &times; 20 portrait</b></div>
       <p class="hint">The frame rotates, not the photograph.</p>
+      <p class="hint" id="paperNote">Paper 15 &times; 20 cm (6 &times; 8 in) &middot; 1800 &times; 2400 px at 300 dpi</p>
     </div>
 
     <div class="panel-head"><h2>Shortcuts</h2></div>

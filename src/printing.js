@@ -81,51 +81,95 @@ window.FM = window.FM || {};
     return Array.from(bySize.values());
   }
 
-  /** Send photos to the printer. */
-  async function send(entries, opts) {
-    if (!entries.length) return { success: false, reason: 'nothing selected' };
+  /* ---------------------------------------------------------------- queue */
 
+  /**
+   * Printing must never hold up editing. Jobs go on a queue and are handed to
+   * the printer one at a time in the background while the operator carries on
+   * with the next photograph.
+   */
+  const queue = [];
+  let running = false;
+  let watcher = function () {};
+
+  function onQueueChange(fn) { watcher = fn; }
+
+  function queueStatus() {
+    return {
+      jobs: queue.length + (running ? 1 : 0),
+      pages: queue.reduce((n, g) => n + g.pages, 0) + (running ? running.pages : 0),
+      busy: !!running
+    };
+  }
+
+  /** Hand one page-size group to the printer. Replaceable for testing. */
+  async function dispatch(group, opts) {
+    const images = [];
+    for (const e of group.items) {
+      const dataUrl = await blobToDataUrl(e.blob);
+      for (let i = 0; i < (e.copies || 1); i++) images.push(dataUrl);
+    }
+    return window.fastmike.printImages({
+      images,
+      widthMm: group.wMm,
+      heightMm: group.hMm,
+      printer: opts.printer || null,
+      silent: !!opts.silent && !!opts.printer
+    });
+  }
+
+  async function pump() {
+    if (running) return;
+    while (queue.length) {
+      running = queue.shift();
+      watcher(queueStatus());
+      try {
+        const res = await FM.printing.dispatch(running.group, running.opts);
+        if (!res || !res.success) {
+          watcher(queueStatus(), { error: (res && res.reason) || 'print cancelled' });
+        }
+      } catch (err) {
+        watcher(queueStatus(), { error: err.message });
+      }
+      running = false;
+      watcher(queueStatus());
+    }
+  }
+
+  /** Queue photos for printing and return immediately. */
+  function send(entries, opts) {
+    if (!entries.length) return { queued: 0 };
+
+    if (!DESKTOP) return sendNow(entries, opts);
+
+    const jobs = plan(entries).map((group) => ({ group, opts, pages: group.pages }));
+    queue.push(...jobs);
+    watcher(queueStatus());
+    pump();
+    return { queued: jobs.reduce((n, j) => n + j.pages, 0) };
+  }
+
+  /** Browser demo path - straight to the browser's own print dialog. */
+  function sendNow(entries) {
     const bySize = plan(entries);
-
-    if (!DESKTOP) {
-      // browser demo path - the browser's own print dialog
-      const first = bySize[0];
-      const w = window.open('', '_blank');
-      const pages = [];
-      for (const g of bySize) {
-        for (const e of g.items) {
-          for (let i = 0; i < (e.copies || 1); i++) {
-            pages.push(`<div class="pg" style="width:${g.wMm}mm;height:${g.hMm}mm"><img src="${e.url}"></div>`);
-          }
+    const first = bySize[0];
+    const pages = [];
+    for (const g of bySize) {
+      for (const e of g.items) {
+        for (let i = 0; i < (e.copies || 1); i++) {
+          pages.push(`<div class="pg" style="width:${g.wMm}mm;height:${g.hMm}mm"><img src="${e.url}"></div>`);
         }
       }
-      w.document.write(
-        `<style>@page{size:${first.wMm}mm ${first.hMm}mm;margin:0}body{margin:0}
-         .pg{page-break-after:always;overflow:hidden}
-         .pg img{width:100%;height:100%;object-fit:fill;display:block}</style>` + pages.join('')
-      );
-      w.document.close();
-      w.onload = () => w.print();
-      return { success: true };
     }
-
-    let last = { success: true };
-    for (const g of bySize) {
-      const images = [];
-      for (const e of g.items) {
-        const dataUrl = await blobToDataUrl(e.blob);
-        for (let i = 0; i < (e.copies || 1); i++) images.push(dataUrl);
-      }
-      last = await window.fastmike.printImages({
-        images,
-        widthMm: g.wMm,
-        heightMm: g.hMm,
-        printer: opts.printer || null,
-        silent: !!opts.silent && !!opts.printer
-      });
-      if (!last || !last.success) return last || { success: false };
-    }
-    return last;
+    const w = window.open('', '_blank');
+    w.document.write(
+      `<style>@page{size:${first.wMm}mm ${first.hMm}mm;margin:0}body{margin:0}
+       .pg{page-break-after:always;overflow:hidden}
+       .pg img{width:100%;height:100%;object-fit:fill;display:block}</style>` + pages.join('')
+    );
+    w.document.close();
+    w.onload = () => w.print();
+    return { queued: pages.length };
   }
 
   /** Write print-ready files to a folder the user chooses. */
@@ -150,6 +194,9 @@ window.FM = window.FM || {};
     return entries.length;
   }
 
-  FM.printing = { BATCH, init, renderToPrint, groups, plan, send, exportFiles, blobToDataUrl };
+  FM.printing = {
+    BATCH, init, renderToPrint, groups, plan, send, dispatch,
+    onQueueChange, queueStatus, exportFiles, blobToDataUrl
+  };
 
 })(window.FM);

@@ -110,11 +110,31 @@ Each photo is laid out on its own page at exactly its own size with zero margins
 the printer driver never rescales the crop. Portrait and landscape photos are sent as
 separate jobs, because a single job cannot mix page sizes.
 
+Printing never blocks editing. Jobs go onto a queue and are handed to the printer one
+at a time in the background; a small "printing N pages" badge appears next to the
+Print button while the queue drains.
+
+## Paper
+
+FastMike prints one format: **6 × 8 inch — the media sold in Europe as 15 × 20 cm**,
+and what DNP (DS620, RX1HS, DS820) and Citizen (CX-02) dye-sub printers actually load.
+
+Pages are handed to the driver as exactly 152.4 × 203.2 mm and rendered at
+**1800 × 2400 px at 300 dpi**, which is the native page of those printers. Sending a
+rounded 150 × 200 mm page instead would make the driver rescale the image and can
+leave a sliver of unprinted paper along one edge.
+
+6:8 is the same 3:4 ratio as 15:20, so the crop frame on screen is unaffected.
+
 ## Printer setup
 
 Choose the printer once, in the top right, and tick **Print without asking**. The
 choice is saved to disk and restored next time, so nothing has to be picked again
-mid-event. Target printers are dye-sublimation units such as DNP and Citizen CX.
+mid-event.
+
+On first run, if no printer has been chosen yet, FastMike looks for a DNP, Citizen,
+Sinfonia or Mitsubishi unit and selects that rather than the Windows default — which
+at a venue is usually an office laser or a PDF writer.
 
 ## Keyboard
 
@@ -141,7 +161,7 @@ Highlights and shadows are masked by luminance, so lifting shadows does not wash
 a bright sky and pulling highlights down does not muddy the dark tones.
 
 When a photo is added to Edited it is re-rendered through the same maths at true
-print resolution — 1772 × 2362 px for 15×20 cm at 300 dpi — so the print is a real
+print resolution — 1800 × 2400 px for 6 × 8 in at 300 dpi — so the print is a real
 full-resolution render, not an upscaled preview.
 
 There is a second, CPU implementation of exactly the same maths. A WebGL context can

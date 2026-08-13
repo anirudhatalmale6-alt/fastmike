@@ -314,6 +314,15 @@ button, input, select { font: inherit; color: inherit; }
 }
 .gpunote + .fileinfo { margin-left: 12px; }
 
+.queuetag {
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid rgba(240,165,0,.45);
+  border-radius: 10px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------------ edited strip */
 
 .edited { height: var(--edited-h); flex: 0 0 auto; }

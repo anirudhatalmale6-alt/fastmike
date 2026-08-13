@@ -565,13 +565,26 @@
     openModal('Print ' + app.edited.length + ' photos', choices);
   }
 
-  async function doPrint(entries, what) {
-    toast('Sending ' + what + ' to the printer…');
+  /**
+   * Queue and return straight away - the operator keeps editing while pages go
+   * out in the background.
+   */
+  function doPrint(entries, what) {
     const printer = el.printerSelect.value === '__dialog__' ? '' : el.printerSelect.value;
-    const res = await FM.printing.send(entries, { printer, silent: el.silent.checked });
-    if (res && res.success) toast('Sent to printer');
-    else toast('Print cancelled' + (res && res.reason ? ': ' + res.reason : ''), true);
+    const res = FM.printing.send(entries, { printer, silent: el.silent.checked });
+    toast('Queued ' + what + (res.queued ? ' (' + res.queued + ' pages)' : ''));
   }
+
+  FM.printing.onQueueChange((status, problem) => {
+    const tag = $('queueTag');
+    if (status.pages > 0) {
+      tag.hidden = false;
+      tag.textContent = 'printing ' + status.pages + ' page' + (status.pages === 1 ? '' : 's') + '…';
+    } else {
+      tag.hidden = true;
+    }
+    if (problem && problem.error) toast('Printer: ' + problem.error, true);
+  });
 
   async function exportEdited() {
     const n = await FM.printing.exportFiles(app.edited);
@@ -592,12 +605,20 @@
     Object.assign(app.settings, saved || {});
 
     const printers = await window.fastmike.listPrinters();
+
+    // With nothing saved yet, pick the event printer rather than whatever
+    // Windows has set as default (usually an office laser or a PDF writer).
+    const isPhotoPrinter = (p) =>
+      /\b(dnp|citizen|ds620|ds820|rx1|cx-?0?2|cy-?0?2|qw410|sinfonia|mitsubishi)\b/i
+        .test((p.displayName || '') + ' ' + p.name);
+    const preferred = printers.find(isPhotoPrinter);
+
     const opts = ['<option value="__dialog__">Ask each time (system dialog)</option>'];
     printers.forEach((p) => {
       const name = p.displayName || p.name;
       const chosen = app.settings.printer
         ? p.name === app.settings.printer
-        : p.isDefault;
+        : (preferred ? p.name === preferred.name : p.isDefault);
       opts.push(`<option value="${p.name}"${chosen ? ' selected' : ''}>${name}</option>`);
     });
     el.printerSelect.innerHTML = opts.join('');

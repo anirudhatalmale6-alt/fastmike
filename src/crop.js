@@ -14,9 +14,19 @@ window.FM = window.FM || {};
 
 (function (FM) {
 
-  const SHORT_MM = 150;
-  const LONG_MM = 200;
+  /* The paper is 6 x 8 inch media - what is sold in Europe as "15x20 cm" and
+   * what DNP (DS620, RX1HS, DS820) and Citizen (CX-02) dye-sub printers
+   * actually load. Working in exact inches means the page we hand the driver
+   * matches the ribbon precisely, so the printer never rescales the crop or
+   * leaves a sliver of unprinted paper. 6:8 is the same 3:4 ratio as 15:20, so
+   * the crop frame on screen is unchanged.
+   */
+  const SHORT_IN = 6;
+  const LONG_IN = 8;
   const DPI = 300;
+
+  const SHORT_MM = SHORT_IN * 25.4;   // 152.4
+  const LONG_MM = LONG_IN * 25.4;     // 203.2
   const MAX_ZOOM = 5;
 
   /** Page size in millimetres for a photo, honouring its frame rotation. */
@@ -26,12 +36,12 @@ window.FM = window.FM || {};
       : { w: SHORT_MM, h: LONG_MM };
   }
 
-  /** Output size in pixels at print resolution. */
+  /** Output size in pixels - 1800 x 2400, the native 6x8 page of these printers. */
   function printPixels(photo) {
-    const mm = pageMm(photo);
+    const land = photo && photo.state.landscape;
     return {
-      w: Math.round((mm.w / 25.4) * DPI),
-      h: Math.round((mm.h / 25.4) * DPI)
+      w: Math.round((land ? LONG_IN : SHORT_IN) * DPI),
+      h: Math.round((land ? SHORT_IN : LONG_IN) * DPI)
     };
   }
 
@@ -115,7 +125,7 @@ window.FM = window.FM || {};
   }
 
   FM.crop = {
-    SHORT_MM, LONG_MM, DPI, MAX_ZOOM,
+    SHORT_IN, LONG_IN, SHORT_MM, LONG_MM, DPI, MAX_ZOOM,
     pageMm, printPixels, frameIn, photoRect, clampPan, zoomBy, fit
   };
 
