@@ -228,9 +228,13 @@ button, input, select { font: inherit; color: inherit; }
   flex: 1;
   position: relative;
   min-height: 0;
-  background: repeating-conic-gradient(#181818 0% 25%, #141414 0% 50%) 50% / 22px 22px;
+  /* A flat colour on purpose. While the photo is being dragged the mask over
+     it is semi-transparent, so whatever is underneath has to be repainted on
+     every frame - a repeating gradient there costs real frames per second. */
+  background: #141414;
   overflow: hidden;
   cursor: grab;
+  touch-action: none;
 }
 .stage.dragging { cursor: grabbing; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -244,7 +248,10 @@ button, input, select { font: inherit; color: inherit; }
      exactly what prints. While dragging it shows through faintly so the
      operator can see what is about to come into shot. */
   box-shadow: 0 0 0 9999px #131313;
-  transition: box-shadow .12s, left .12s, top .12s, width .12s, height .12s;
+  /* box-shadow is deliberately not transitioned: animating a shadow this large
+     repaints it on every frame of the animation, which is felt as a stutter at
+     the exact moment a drag starts and ends. */
+  transition: left .12s, top .12s, width .12s, height .12s;
 }
 .stage.dragging .crop-frame { box-shadow: 0 0 0 9999px rgba(19,19,19,.86); transition: none; }
 .crop-frame .grid {
@@ -507,6 +514,22 @@ kbd {
 .sheet-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
 
 /* ------------------------------------------------------------ toast */
+
+/* F2 panel - what the renderer is really doing on this machine */
+.diag {
+  position: absolute;
+  top: 10px; left: 10px;
+  z-index: 6;
+  pointer-events: none;
+  white-space: pre;
+  font: 11px/1.5 Consolas, "DejaVu Sans Mono", monospace;
+  color: #d8d8d8;
+  background: rgba(0,0,0,.78);
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.diag[hidden] { display: none; }
 
 .toast {
   position: fixed;

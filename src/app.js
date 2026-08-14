@@ -26,7 +26,8 @@
     edited: [],
     editedSelected: null,
     clipboard: null,
-    image: null,
+    image: null,        // the untouched original - printing uses this
+    preview: null,      // screen-sized copy of it - the stage uses this
     imageOf: null,
     loadToken: 0,
     frame: { x: 0, y: 0, w: 0, h: 0 },
@@ -67,7 +68,7 @@
   }
 
   const preview = new FM.Surface($('preview'), onDowngrade);
-  const exporter = new FM.Surface(document.createElement('canvas'), onDowngrade);
+  const exporter = new FM.Surface(document.createElement('canvas'), onDowngrade, true);
   FM.printing.init(exporter);
 
   /* --------------------------------------------------------------- toast */
@@ -104,6 +105,23 @@
 
   /* ------------------------------------------------------------- geometry */
 
+  /**
+   * How many device pixels the stage canvas is given.
+   *
+   * Normally one for one with the screen. If a drag turns out to be slow on
+   * this particular machine the canvas is quietly given fewer pixels for the
+   * duration of the drag and put back at full resolution the moment the mouse
+   * is released, so panning stays responsive on weak laptop graphics instead of
+   * crawling. Nothing that gets printed is affected.
+   */
+  const SLOW_FRAME_MS = 26;      // roughly below 38 frames a second
+  let interactiveScale = 1;      // stays 1 until this machine proves it is slow
+  let renderScale = 1;
+
+  function pixelRatio() {
+    return (window.devicePixelRatio || 1) * renderScale;
+  }
+
   function layout() {
     const sw = el.stage.clientWidth;
     const sh = el.stage.clientHeight;
@@ -115,9 +133,21 @@
     el.frame.style.width = f.w + 'px';
     el.frame.style.height = f.h + 'px';
 
-    const dpr = window.devicePixelRatio || 1;
-    preview.canvas.width = Math.round(sw * dpr);
-    preview.canvas.height = Math.round(sh * dpr);
+    const dpr = pixelRatio();
+    const w = Math.max(1, Math.round(sw * dpr));
+    const h = Math.max(1, Math.round(sh * dpr));
+    // resizing a canvas throws away its contents, so only do it when it changed
+    if (preview.canvas.width !== w || preview.canvas.height !== h) {
+      preview.canvas.width = w;
+      preview.canvas.height = h;
+    }
+  }
+
+  function setRenderScale(s) {
+    if (renderScale === s) return;
+    renderScale = s;
+    layout();
+    draw();
   }
 
   const current = () => (app.selected >= 0 ? app.photos[app.selected] : null);
@@ -134,17 +164,54 @@
     });
   }
 
+  const perf = { frames: 0, slow: 0, last: 0, fps: 0 };
+
   function draw() {
+    const t0 = performance.now();
     const p = current();
-    if (!p || !app.image) {
+    if (!p || !app.preview) {
       preview.releaseImage();
       preview.draw({ x: 0, y: 0, w: 0, h: 0 }, FM.photos.NEUTRAL);
       return;
     }
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = pixelRatio();
     const r = FM.crop.photoRect(p, app.frame);
-    preview.setImage(app.image);
+    preview.setImage(app.preview);
     preview.draw({ x: r.x * dpr, y: r.y * dpr, w: r.w * dpr, h: r.h * dpr }, p.state);
+
+    if (perf.last) perf.fps = Math.round(1000 / Math.max(1, t0 - perf.last));
+    perf.last = t0;
+    perf.frames++;
+    if (diag.hidden === false) showDiagnostics();
+    return performance.now() - t0;
+  }
+
+  /* ---------------------------------------------------------- diagnostics */
+
+  /**
+   * F2 shows what the renderer is actually doing. There is no way to guess how
+   * a particular laptop behaves from here, so this is the quickest way to find
+   * out: drag a photo with it open and read off the frame rate.
+   */
+  const diag = document.createElement('div');
+  diag.className = 'diag';
+  diag.hidden = true;
+  el.stage.appendChild(diag);
+
+  function showDiagnostics() {
+    const p = current();
+    const d = app.preview
+      ? (app.preview.naturalWidth || app.preview.width) + '×' +
+        (app.preview.naturalHeight || app.preview.height)
+      : '—';
+    diag.textContent =
+      'renderer: ' + (preview.mode === 'gl' ? 'graphics card' : 'software (CPU)') +
+      '\nframes/sec while moving: ' + (perf.fps || '—') +
+      '\ncanvas: ' + preview.canvas.width + '×' + preview.canvas.height +
+      '  (scale ' + renderScale.toFixed(2) + ')' +
+      '\npreview image: ' + d +
+      '\noriginal: ' + (p ? p.w + '×' + p.h : '—') +
+      '\nscreen scaling: ' + (window.devicePixelRatio || 1);
   }
 
   /* --------------------------------------------------------------- import */
@@ -222,9 +289,10 @@
 
     const token = ++app.loadToken;
     try {
-      const img = await FM.photos.loadImage(await FM.photos.srcFor(p));
+      const img = await FM.photos.openImage(p);
       if (token !== app.loadToken) return;   // a newer selection won the race
       app.image = img;
+      app.preview = FM.photos.previewCopy(img);
       app.imageOf = p.id;
       FM.crop.clampPan(p, app.frame);
       render();
@@ -331,7 +399,8 @@
     el.stage.classList.add('dragging');
     el.hint.style.opacity = 0;
     const p = current();
-    drag = { x: e.clientX, y: e.clientY, tx: p.state.tx, ty: p.state.ty };
+    drag = { x: e.clientX, y: e.clientY, tx: p.state.tx, ty: p.state.ty, t: 0, slow: 0 };
+    if (interactiveScale !== 1) setRenderScale(interactiveScale);
   });
 
   el.stage.addEventListener('pointermove', (e) => {
@@ -341,21 +410,49 @@
     p.state.ty = drag.ty + (e.clientY - drag.y) / app.frame.h;
     FM.crop.clampPan(p, app.frame);
     render();
+
+    // If this machine cannot keep up, hand the canvas fewer pixels for the
+    // rest of the drag rather than letting the photo stutter under the mouse.
+    const now = performance.now();
+    if (drag.t) {
+      const gap = now - drag.t;
+      drag.slow = gap > SLOW_FRAME_MS ? drag.slow + 1 : 0;
+      if (drag.slow >= 6 && interactiveScale === 1) {
+        interactiveScale = 0.6;
+        setRenderScale(interactiveScale);
+      }
+    }
+    drag.t = now;
   });
 
   function endDrag(e) {
     if (!drag) return;
     drag = null;
     el.stage.classList.remove('dragging');
+    setRenderScale(1);          // back to full resolution the instant it stops
     try { el.stage.releasePointerCapture(e.pointerId); } catch (_) {}
   }
   el.stage.addEventListener('pointerup', endDrag);
   el.stage.addEventListener('pointercancel', endDrag);
 
   /**
-   * Wheel over the photo. Ctrl and Alt take over the wheel completely, so a
-   * modifier never zooms and adjusts at the same time.
+   * Wheel over the photo. A modifier takes over the wheel completely, so it
+   * never zooms and adjusts at the same time. All four adjustments are on the
+   * wheel - see WHEEL_KEYS, which is the one place the pairing is decided.
    */
+  const WHEEL_KEYS = [
+    { ctrl: true,  alt: true,  shift: false, key: 'shadows'    },  // Ctrl+Alt
+    { ctrl: true,  alt: false, shift: false, key: 'brightness' },  // Ctrl
+    { ctrl: false, alt: true,  shift: false, key: 'highlights' },  // Alt
+    { ctrl: false, alt: false, shift: true,  key: 'contrast'   }   // Shift
+  ];
+
+  function wheelKeyFor(e) {
+    const hit = WHEEL_KEYS.find((m) =>
+      m.ctrl === !!(e.ctrlKey || e.metaKey) && m.alt === !!e.altKey && m.shift === !!e.shiftKey);
+    return hit ? hit.key : null;
+  }
+
   el.stage.addEventListener('wheel', (e) => {
     const p = current();
     if (!p) return;
@@ -363,14 +460,10 @@
     el.hint.style.opacity = 0;
 
     const dir = e.deltaY < 0 ? 1 : -1;
-    const stepBy = e.shiftKey ? 5 : 2;
 
-    if (e.ctrlKey) {
-      setAdjust('brightness', Math.round(p.state.brightness * 100) + dir * stepBy);
-      return;
-    }
-    if (e.altKey) {
-      setAdjust('highlights', Math.round(p.state.highlights * 100) + dir * stepBy);
+    const adjust = wheelKeyFor(e);
+    if (adjust) {
+      setAdjust(adjust, Math.round(p.state[adjust] * 100) + dir * 2);
       return;
     }
 
@@ -423,9 +516,10 @@
     const p = current();
     if (!p) return toast('Select a photo first', true);
 
+    // always the untouched original, never the screen-sized preview copy
     const img = app.image && app.imageOf === p.id
       ? app.image
-      : await FM.photos.loadImage(await FM.photos.srcFor(p));
+      : await FM.photos.openImage(p);
 
     const { blob, wMm, hMm } = await FM.printing.renderToPrint(p, img);
     const base = p.name.replace(/\.[^.]+$/, '');
@@ -516,6 +610,7 @@
           app.photos = [];
           app.selected = -1;
           app.image = null;
+          app.preview = null;
           app.imageOf = null;
           renderOriginals();
           el.fileInfo.textContent = '—';
@@ -655,6 +750,15 @@
   el.zoom.addEventListener('input', (e) => setZoom(+e.target.value / 100));
 
   document.addEventListener('keydown', (e) => {
+    // Alt is an editing modifier here. Windows would otherwise treat a bare Alt
+    // as "open the menu bar", which steals the keyboard away from the app.
+    if (e.key === 'Alt') e.preventDefault();
+
+    if (e.key === 'F2') {
+      diag.hidden = !diag.hidden;
+      if (!diag.hidden) showDiagnostics();
+      return;
+    }
     if (!el.modal.hidden && e.key === 'Escape') return closeModal();
     const tag = document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
@@ -716,7 +820,10 @@
   window.__fastmike = app;
   window.__fastmikeImport = addPhotos;
   window.__fastmikeInternals = {
-    preview, exporter, layout, render, addToEdited, printAll, rotateFrame, setAdjust
+    preview, exporter, layout, render, draw, addToEdited, printAll, rotateFrame,
+    setAdjust, wheelKeyFor, WHEEL_KEYS, perf,
+    renderScale: () => renderScale,
+    setInteractiveScale: (s) => { interactiveScale = s; }
   };
 
 })(window.FM);

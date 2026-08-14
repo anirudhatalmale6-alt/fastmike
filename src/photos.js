@@ -40,19 +40,62 @@ window.FM = window.FM || {};
     });
   }
 
-  function makeThumb(img, maxW, maxH) {
-    const s = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
+  const dimsOf = (img) => ({
+    w: img.naturalWidth || img.width,
+    h: img.naturalHeight || img.height
+  });
+
+  function scaleTo(img, w, h) {
     const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(img.naturalWidth * s));
-    c.height = Math.max(1, Math.round(img.naturalHeight * s));
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL('image/jpeg', 0.72);
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    const cx = c.getContext('2d');
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(img, 0, 0, c.width, c.height);
+    return c;
   }
 
-  /** Resolve a photo to something an <img> can load. */
-  function srcFor(photo) {
-    if (photo.path && DESKTOP) return window.fastmike.readImage(photo.path);
-    return Promise.resolve(photo.url);
+  function makeThumb(img, maxW, maxH) {
+    const d = dimsOf(img);
+    const s = Math.min(maxW / d.w, maxH / d.h, 1);
+    return scaleTo(img, d.w * s, d.h * s).toDataURL('image/jpeg', 0.72);
+  }
+
+  /**
+   * A screen-sized copy of the original, used for the live preview only.
+   *
+   * Panning a 24 megapixel photograph means the graphics card has to shrink a
+   * 96 MB texture down to a window-sized rectangle on every single frame, and
+   * on laptop graphics that is what makes dragging feel heavy. Reducing it once
+   * to something a little larger than the screen can show costs nothing
+   * visible - the crop frame is around 600 pixels tall - and every frame after
+   * that is cheap. Printing always goes back to the untouched original.
+   */
+  const PREVIEW_MAX = 2400;
+
+  function previewCopy(img) {
+    const d = dimsOf(img);
+    const s = Math.min(1, PREVIEW_MAX / Math.max(d.w, d.h));
+    return s >= 1 ? img : scaleTo(img, d.w * s, d.h * s);
+  }
+
+  /**
+   * Open a photo's original at full size.
+   *
+   * On the desktop the file is read as raw bytes and handed to the decoder
+   * through a blob URL, which is revoked as soon as the image is decoded, so
+   * nothing is left holding a copy of the file.
+   */
+  async function openImage(photo) {
+    if (!(photo.path && DESKTOP)) return loadImage(photo.url);
+
+    const { bytes, mime } = await window.fastmike.readImageBytes(photo.path);
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    try {
+      return await loadImage(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   /**
@@ -65,19 +108,17 @@ window.FM = window.FM || {};
 
     for (const entry of entries) {
       try {
-        // decoded once here for the thumbnail, then released - see srcFor()
-        const src = entry.path && DESKTOP
-          ? await window.fastmike.readImage(entry.path)
-          : entry.url;
-        const img = await loadImage(src);
+        // decoded once here for the thumbnail, then released - see openImage()
+        const img = await openImage(entry);
+        const d = dimsOf(img);
         made.push({
           id: nextId(),
           name: entry.name,
           path: entry.path || null,
           url: entry.url || null,
           thumb: makeThumb(img, 320, 320),
-          w: img.naturalWidth,
-          h: img.naturalHeight,
+          w: d.w,
+          h: d.h,
           state: newState()
         });
       } catch (err) {
@@ -100,7 +141,8 @@ window.FM = window.FM || {};
   }
 
   FM.photos = {
-    DESKTOP, NEUTRAL, newState, loadImage, makeThumb, srcFor, build, pickFiles, pickFolder
+    DESKTOP, NEUTRAL, PREVIEW_MAX, newState, loadImage, makeThumb, dimsOf,
+    previewCopy, openImage, build, pickFiles, pickFolder
   };
 
 })(window.FM);

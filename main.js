@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -22,6 +22,11 @@ let win = null;
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
+/* Alt is an editing modifier in this app, so there must be no menu bar for
+ * Windows to pop open when it is pressed. `autoHideMenuBar` only hides it -
+ * Alt still summons it - so the menu is removed altogether. */
+Menu.setApplicationMenu(null);
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1600,
@@ -30,6 +35,7 @@ function createWindow() {
     minHeight: 760,
     backgroundColor: '#151515',
     autoHideMenuBar: true,
+    show: false,
     title: 'FastMike',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -42,6 +48,8 @@ function createWindow() {
     }
   });
 
+  win.setMenuBarVisibility(false);
+  win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 }
 
@@ -78,11 +86,20 @@ ipcMain.handle('import:files', async () => {
   return res.filePaths.map((p) => ({ name: path.basename(p), path: p }));
 });
 
-/** Read one original off disk. Read-only - the source file is never written. */
-ipcMain.handle('image:read', async (_e, p) => {
+/**
+ * Read one original off disk. Read-only - the source file is never written.
+ *
+ * The bytes are sent as-is rather than as a base64 data URL: a 24 megapixel
+ * JPEG turns into an 11 MB string that has to be encoded here, copied across
+ * the bridge and parsed again in the renderer, which is dead time between
+ * clicking a photo and seeing it.
+ */
+ipcMain.handle('image:bytes', async (_e, p) => {
   const buf = await fs.promises.readFile(p);
-  const mime = MIME[path.extname(p).toLowerCase()] || 'image/jpeg';
-  return 'data:' + mime + ';base64,' + buf.toString('base64');
+  return {
+    bytes: new Uint8Array(buf),
+    mime: MIME[path.extname(p).toLowerCase()] || 'image/jpeg'
+  };
 });
 
 ipcMain.handle('import:folder', async () => {

@@ -76,12 +76,21 @@ set each one:
 
 - drag its slider
 - **roll the mouse wheel over the slider** — no need to grab the handle
-- for the two most-used controls, roll the wheel over the photo itself:
-  **Ctrl + Wheel → Brightness**, **Alt + Wheel → Highlights**
+- roll the wheel over the photo itself, holding a key:
 
-Hold Shift with any of those for larger steps.
+| Held key | Wheel over the photo |
+|---|---|
+| Ctrl | Brightness |
+| Alt | Highlights |
+| Shift | Contrast |
+| Ctrl + Alt | Shadows |
 
-While Ctrl or Alt is held the wheel *only* adjusts — it never zooms at the same time.
+While a key is held the wheel *only* adjusts — it never zooms at the same time.
+The pairing lives in one place in the code (`WHEEL_KEYS` in `src/app.js`); moving
+an adjustment onto a different key is one line.
+
+Pressing Alt never opens a Windows menu bar — the app has no menu at all, so Alt
+belongs to the editing.
 
 Each adjustment has its own reset icon (a symbol, never the word "Reset"), and its
 value turns amber when it is off zero. Double-clicking a slider also resets it.
@@ -147,6 +156,7 @@ at a venue is usually an office laser or a PDF writer.
 | `Ctrl+O` | import photos |
 | `R` | rotate frame 90° |
 | `0` | fit |
+| `F2` | speed and graphics readout |
 
 ---
 
@@ -163,6 +173,34 @@ a bright sky and pulling highlights down does not muddy the dark tones.
 When a photo is added to Edited it is re-rendered through the same maths at true
 print resolution — 1800 × 2400 px for 6 × 8 in at 300 dpi — so the print is a real
 full-resolution render, not an upscaled preview.
+
+### Keeping the drag smooth
+
+Panning a 24-megapixel photograph means shrinking a 96 MB texture down to a
+window-sized rectangle on every frame, and on laptop graphics that is what makes
+dragging feel heavy. Four things prevent it:
+
+- the preview draws from a **screen-sized copy** of the original (long edge 2400 px),
+  made once when the photo is opened. Printing always goes back to the untouched
+  original, so nothing that leaves the app is affected
+- the on-screen WebGL context does **not** preserve its drawing buffer — that is only
+  needed by the offscreen surface the print render reads back from, and it costs a
+  full copy of the buffer every frame
+- the stage background is a flat colour. While dragging, the mask over the photo is
+  semi-transparent, so whatever sits underneath is repainted every frame; a repeating
+  gradient there costs real frames per second
+- if a drag is still slow on a particular machine, the canvas is quietly given fewer
+  pixels **for the duration of that drag** and put back to full resolution the moment
+  the mouse is released
+
+`F2` shows what is actually happening: graphics card or software rendering, the frame
+rate while the photo is moving, the canvas size, and the screen scaling factor.
+
+Originals are read off disk as raw bytes rather than as base64 text. On a 24-megapixel
+JPEG that is the difference between roughly 600 ms and 200 ms from clicking a photo to
+seeing it.
+
+### When the graphics card gives up
 
 There is a second, CPU implementation of exactly the same maths. A WebGL context can
 disappear at any time — a driver update, a laptop waking from sleep, a remote desktop

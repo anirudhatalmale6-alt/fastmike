@@ -57,12 +57,18 @@ void main() {
   /* ------------------------------------------------------------ GPU engine */
 
   class ToneRenderer {
-    constructor(canvas) {
+    /**
+     * `readback` is for the offscreen surface the print render uses, which has
+     * to read the finished frame back out with toBlob(). It costs a full copy
+     * of the drawing buffer on every frame, so the on-screen preview - which is
+     * never read back - does without it and simply swaps buffers.
+     */
+    constructor(canvas, readback) {
       this.canvas = canvas;
       const opts = {
         alpha: true,
         premultipliedAlpha: false,
-        preserveDrawingBuffer: true,
+        preserveDrawingBuffer: !!readback,
         antialias: false
       };
       this.gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts);
@@ -264,16 +270,17 @@ void main() {
    * the CPU engine means swapping in a fresh canvas element.
    */
   class Surface {
-    constructor(canvas, onDowngrade) {
+    constructor(canvas, onDowngrade, readback) {
       this.canvas = canvas;
       this.onDowngrade = onDowngrade || function () {};
+      this.readback = !!readback;
       this.image = null;
       this._useGl();
     }
 
     _useGl() {
       try {
-        this.engine = new ToneRenderer(this.canvas);
+        this.engine = new ToneRenderer(this.canvas, this.readback);
         this.mode = 'gl';
         this.canvas.addEventListener('webglcontextlost', (e) => {
           e.preventDefault();      // required, or the context is never restored
