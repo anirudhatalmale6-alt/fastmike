@@ -135,15 +135,48 @@ leave a sliver of unprinted paper along one edge.
 
 6:8 is the same 3:4 ratio as 15:20, so the crop frame on screen is unaffected.
 
+## Several photographers on one laptop
+
+Each photographer gets a tab along the top. A tab holds **his own imported photos, his
+own edited set, and his own printer** — clicking a name swaps the whole working view
+instantly, and nothing is copied or reloaded.
+
+- **+ Photographer** adds one. Double-click a tab to rename, the `×` removes.
+- `Ctrl+1` … `Ctrl+9` jump between them without touching the mouse.
+- The number on a tab is how many of that photographer's photos are sitting in Edited,
+  waiting to go out.
+- **Clear Session** only clears the photographer whose tab is open. The others keep
+  working.
+
+Anything printed goes to the printer belonging to whoever's tab is open, so two
+photographers can be sending pages at the same time and each set comes out of the
+right machine.
+
+The photographers and their printers are written to disk, not the photographs. If the
+app is restarted in the middle of an event, the setup is still there.
+
 ## Printer setup
 
-Choose the printer once, in the top right, and tick **Print without asking**. The
-choice is saved to disk and restored next time, so nothing has to be picked again
-mid-event.
+Choose the printer once per photographer, in the top right, and tick **Print without
+asking**. The choice is saved to disk and restored next time, so nothing has to be
+picked again mid-event.
 
-On first run, if no printer has been chosen yet, FastMike looks for a DNP, Citizen,
-Sinfonia or Mitsubishi unit and selects that rather than the Windows default — which
-at a venue is usually an office laser or a PDF writer.
+On first run, if no printer has been chosen yet, FastMike looks for DNP, Citizen,
+Sinfonia or Mitsubishi units rather than the Windows default — which at a venue is
+usually an office laser or a PDF writer. With several dye-subs attached and several
+photographers set up, they are handed out one each rather than all pointing at the
+same machine.
+
+## Print queue
+
+The **Print Queue** button opens everything sent to a printer this session — the
+photographs, the photographer they came from, the printer, the page size and whether
+it actually printed.
+
+At an event the usual question is *"did that one come out?"*, and this is the only
+place that can answer it. A job that failed — paper out, printer asleep — is shown in
+red with the reason and a **Try again** button; a job that has not started yet can be
+cancelled. The badge on the button turns red when something has failed.
 
 ## Keyboard
 
@@ -154,6 +187,7 @@ at a venue is usually an office laser or a PDF writer.
 | `Ctrl+C` / `Ctrl+V` | copy / paste adjustments |
 | `Ctrl+P` | print |
 | `Ctrl+O` | import photos |
+| `Ctrl+1` … `Ctrl+9` | switch photographer |
 | `R` | rotate frame 90° |
 | `0` | fit |
 | `F2` | speed and graphics readout |
@@ -228,7 +262,10 @@ crop maths.
 
 ## Not built yet
 
-Section 17–18 of the specification (multiple photographers, one tab each, a printer
-assigned per photographer) is marked as a future version and is **not** implemented.
-Printer configuration is already stored in a settings file, which is where
-per-photographer printers would hang off.
+Sections 17–18 of the specification (multiple photographers, one tab each, a printer
+assigned per photographer) are now implemented — see *Several photographers on one
+laptop* above.
+
+Nothing else in the specification is outstanding. What is deliberately left out:
+photographs themselves are never written to the settings file, and there is no
+cross-photographer view — each tab is its own workspace, which is the point.

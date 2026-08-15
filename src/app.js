@@ -21,19 +21,29 @@
   ];
 
   const app = {
-    photos: [],
-    selected: -1,
-    edited: [],
-    editedSelected: null,
     clipboard: null,
     image: null,        // the untouched original - printing uses this
     preview: null,      // screen-sized copy of it - the stage uses this
     imageOf: null,
     loadToken: 0,
     frame: { x: 0, y: 0, w: 0, h: 0 },
-    settings: { printer: '', silent: true },
+    settings: {},
     seq: 0
   };
+
+  /**
+   * The working set belongs to whichever photographer's tab is open, so these
+   * read straight off his record. Everything below carries on using app.photos
+   * exactly as before and switching tabs costs nothing - no copying, no reload.
+   */
+  ['photos', 'selected', 'edited', 'editedSelected'].forEach((k) => {
+    Object.defineProperty(app, k, {
+      get() { return FM.people.active()[k]; },
+      set(v) { FM.people.active()[k] = v; }
+    });
+  });
+
+  FM.people.load({});   // one photographer until the saved settings arrive
 
   const nextId = (p) => p + ++app.seq;
   const $ = (id) => document.getElementById(id);
@@ -57,7 +67,11 @@
     frameFormat: $('frameFormat'),
     modal: $('modal'),
     modalTitle: $('modalTitle'),
-    modalBody: $('modalBody')
+    modalBody: $('modalBody'),
+    tablist: $('tablist'),
+    printerLabel: $('printerLabel'),
+    spooler: $('spooler'),
+    spoolerBody: $('spoolerBody')
   };
 
   /* ------------------------------------------------------------- surfaces */
@@ -95,6 +109,29 @@
       el.modalBody.appendChild(b);
     });
     el.modal.hidden = false;
+  }
+
+  /** Same sheet, but asking for a word rather than a choice. */
+  function openPrompt(title, value, okLabel, run) {
+    el.modalTitle.textContent = title;
+    el.modalBody.innerHTML =
+      '<input type="text" class="sheet-input" id="sheetInput" maxlength="24">';
+    const input = $('sheetInput');
+    input.value = value || '';
+
+    const ok = document.createElement('button');
+    ok.className = 'btn btn-accent wide';
+    ok.textContent = okLabel;
+    ok.addEventListener('click', () => { const v = input.value; closeModal(); run(v); });
+    el.modalBody.appendChild(ok);
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); ok.click(); }
+    });
+
+    el.modal.hidden = false;
+    input.focus();
+    input.select();
   }
 
   function closeModal() { el.modal.hidden = true; }
@@ -242,6 +279,139 @@
     await addPhotos(files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })));
     el.webPicker.value = '';
   });
+
+  /* -------------------------------------------------------- photographers */
+
+  /**
+   * Spec 17 / 18. The tab strip is the whole feature as far as the operator is
+   * concerned: click a name and you are looking at that photographer's photos,
+   * and anything you print goes to his printer.
+   */
+  function renderTabs() {
+    const activeId = FM.people.activeId;
+    const many = FM.people.list().length > 1;
+
+    el.tablist.innerHTML = FM.people.list().map((p) => {
+      const waiting = p.edited.length;
+      return `
+      <div class="tab${p.id === activeId ? ' on' : ''}" data-id="${p.id}"
+           title="${escapeHtml(p.name)}${p.printer ? ' - ' + escapeHtml(p.printer) : ' - no printer set'}\nDouble-click to rename">
+        <span class="dot" style="background:${p.colour}"></span>
+        <span class="tab-name">${escapeHtml(p.name)}</span>
+        ${waiting ? `<span class="tab-count">${waiting}</span>` : ''}
+        ${many ? `<button class="tab-x" data-remove="${p.id}" title="Remove ${escapeHtml(p.name)}">&times;</button>` : ''}
+      </div>`;
+    }).join('');
+
+    el.tablist.querySelectorAll('.tab').forEach((n) => {
+      n.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-remove]')) return;
+        switchTo(n.dataset.id);
+      });
+      n.addEventListener('dblclick', (ev) => {
+        if (ev.target.closest('[data-remove]')) return;
+        renamePerson(n.dataset.id);
+      });
+    });
+
+    el.tablist.querySelectorAll('[data-remove]').forEach((n) => {
+      n.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        removePerson(n.dataset.remove);
+      });
+    });
+
+    const who = FM.people.active();
+    el.printerLabel.textContent = 'Printer for ' + who.name;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  /**
+   * Switch tab. The decoded bitmaps belong to the photo that was on screen, so
+   * they are dropped - the new tab loads its own selection from disk.
+   */
+  function switchTo(id) {
+    if (!FM.people.setActive(id)) return;
+    app.image = null;
+    app.preview = null;
+    app.imageOf = null;
+    app.loadToken++;
+
+    renderTabs();
+    renderOriginals();
+    renderEdited();
+    syncPrinterForActive();
+
+    const i = app.selected;
+    if (i >= 0 && i < app.photos.length) {
+      app.selected = -1;              // force selectPhoto to do its work
+      selectPhoto(i);
+    } else {
+      el.fileInfo.textContent = '—';
+      syncSliders();
+      syncFrameLabel();
+      layout();
+      render();
+    }
+    saveSettings();
+  }
+
+  function addPerson() {
+    openPrompt('Add photographer', 'Photographer ' + (FM.people.list().length + 1), 'Add', (name) => {
+      const p = FM.people.add(name);
+      renderTabs();
+      switchTo(p.id);
+      renderOriginals();
+      renderEdited();
+      toast(p.name + ' added - set his printer top right');
+    });
+  }
+
+  function renamePerson(id) {
+    const p = FM.people.byId(id);
+    if (!p) return;
+    openPrompt('Rename photographer', p.name, 'Rename', (name) => {
+      if (FM.people.rename(id, name)) { renderTabs(); saveSettings(); }
+    });
+  }
+
+  function removePerson(id) {
+    const p = FM.people.byId(id);
+    if (!p) return;
+    const n = p.photos.length + p.edited.length;
+    openModal('Remove ' + p.name + '?', [
+      {
+        label: n ? 'Remove and discard his ' + n + ' photo(s)' : 'Remove',
+        primary: true,
+        run: () => {
+          const wasActive = FM.people.activeId === id;
+          if (!FM.people.remove(id)) return;
+          renderTabs();
+          if (wasActive) {
+            app.image = null;
+            app.preview = null;
+            app.imageOf = null;
+            app.loadToken++;
+            renderOriginals();
+            renderEdited();
+            syncPrinterForActive();
+            if (app.photos.length) {
+              const i = Math.min(app.photos.length - 1, Math.max(0, app.selected));
+              app.selected = -1;
+              selectPhoto(i);
+            }
+            else { el.fileInfo.textContent = '—'; syncSliders(); render(); }
+          }
+          saveSettings();
+          toast(p.name + ' removed');
+        }
+      }
+    ]);
+  }
 
   /* ---------------------------------------------------------- originals UI */
 
@@ -547,6 +717,7 @@
 
   function renderEdited() {
     el.editCount.textContent = app.edited.length;
+    renderTabs();               // the tab badge counts what is waiting to print
 
     if (!app.edited.length) {
       el.edited.innerHTML = '<div class="empty small"><p>Edited photos appear here &mdash; two rows of five</p></div>';
@@ -603,9 +774,10 @@
 
   function clearAll() {
     if (!app.photos.length && !app.edited.length) return;
-    openModal('Clear this session?', [
+    // only the photographer whose tab is open - the others keep working
+    openModal('Clear ' + FM.people.active().name + "'s photos?", [
       {
-        label: 'Clear everything', primary: true, run: () => {
+        label: 'Clear them', primary: true, run: () => {
           clearEdited();
           app.photos = [];
           app.selected = -1;
@@ -665,20 +837,95 @@
    * out in the background.
    */
   function doPrint(entries, what) {
-    const printer = el.printerSelect.value === '__dialog__' ? '' : el.printerSelect.value;
-    const res = FM.printing.send(entries, { printer, silent: el.silent.checked });
-    toast('Queued ' + what + (res.queued ? ' (' + res.queued + ' pages)' : ''));
+    // whoever's tab is open owns this job, and it goes to his printer
+    const who = FM.people.active();
+    const res = FM.printing.send(entries, {
+      printer: who.printer || '',
+      silent: who.silent !== false,
+      photographer: who.name,
+      colour: who.colour
+    });
+    toast('Queued ' + what + ' for ' + who.name +
+          (res.queued ? ' (' + res.queued + ' pages)' : ''));
   }
 
   FM.printing.onQueueChange((status, problem) => {
     const tag = $('queueTag');
     if (status.pages > 0) {
       tag.hidden = false;
-      tag.textContent = 'printing ' + status.pages + ' page' + (status.pages === 1 ? '' : 's') + '…';
+      tag.className = 'queuetag';
+      tag.textContent = status.pages;
+      tag.title = status.pages + ' page(s) waiting';
+    } else if (status.failed) {
+      tag.hidden = false;
+      tag.className = 'queuetag bad';
+      tag.textContent = '!';
+      tag.title = status.failed + ' job(s) failed';
     } else {
       tag.hidden = true;
     }
-    if (problem && problem.error) toast('Printer: ' + problem.error, true);
+    if (problem && problem.error) {
+      toast('Printer' + (problem.job ? ' (' + problem.job.photographer + ')' : '') +
+            ': ' + problem.error, true);
+    }
+    if (!el.spooler.hidden) renderSpooler();
+  });
+
+  /* ------------------------------------------------------- print queue UI */
+
+  /**
+   * Everything sent to a printer this session, with the photographer it came
+   * from. At an event the usual question is "did that one actually come out",
+   * and this is the only place that can answer it.
+   */
+  const STATE_LABEL = {
+    queued: 'waiting', printing: 'printing now', done: 'printed', failed: 'failed'
+  };
+
+  function clockOf(t) {
+    if (!t) return '';
+    const d = new Date(t);
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  function renderSpooler() {
+    const jobs = FM.printing.jobList();
+    if (!jobs.length) {
+      el.spoolerBody.innerHTML = '<div class="empty small"><p>Nothing has been sent to a printer yet</p></div>';
+      return;
+    }
+
+    el.spoolerBody.innerHTML = jobs.map((j) => `
+      <div class="spool-row ${j.status}">
+        <span class="dot" style="background:${j.colour || '#666'}"></span>
+        <div class="spool-main">
+          <div class="spool-title">${escapeHtml(j.names.slice(0, 3).join(', '))}${j.names.length > 3 ? ' +' + (j.names.length - 3) + ' more' : ''}</div>
+          <div class="spool-sub">${escapeHtml(j.photographer || '—')} &middot; ${escapeHtml(j.printer)} &middot; ${j.pages} page${j.pages === 1 ? '' : 's'} &middot; ${j.size}</div>
+          ${j.error ? `<div class="spool-err">${escapeHtml(j.error)}</div>` : ''}
+        </div>
+        <div class="spool-right">
+          <span class="spool-state">${STATE_LABEL[j.status]}</span>
+          <span class="spool-time">${clockOf(j.finishedAt || j.startedAt || j.queuedAt)}</span>
+        </div>
+        <div class="spool-act">
+          ${j.status === 'failed' ? `<button class="btn btn-ghost sm" data-retry="${j.id}">Try again</button>` : ''}
+          ${j.status === 'queued' ? `<button class="btn btn-ghost sm" data-cancel="${j.id}">Cancel</button>` : ''}
+        </div>
+      </div>`).join('');
+
+    el.spoolerBody.querySelectorAll('[data-retry]').forEach((n) =>
+      n.addEventListener('click', () => { FM.printing.retry(n.dataset.retry); renderSpooler(); }));
+    el.spoolerBody.querySelectorAll('[data-cancel]').forEach((n) =>
+      n.addEventListener('click', () => { FM.printing.cancel(n.dataset.cancel); renderSpooler(); }));
+  }
+
+  function openSpooler() {
+    renderSpooler();
+    el.spooler.hidden = false;
+  }
+
+  el.spooler.addEventListener('click', (e) => {
+    if (e.target === el.spooler || e.target.hasAttribute('data-close')) el.spooler.hidden = true;
   });
 
   async function exportEdited() {
@@ -688,51 +935,94 @@
 
   /* ------------------------------------------------- printer configuration */
 
+  let printerList = [];
+
   async function loadPrinters() {
     if (!DESKTOP) {
+      FM.people.load({});
+      renderTabs();
       el.printerSelect.innerHTML = '<option value="__dialog__">Browser print dialog</option>';
       el.silent.checked = false;
       el.silent.disabled = true;
       return;
     }
 
-    const saved = await window.fastmike.getSettings();
-    Object.assign(app.settings, saved || {});
+    const saved = (await window.fastmike.getSettings()) || {};
+    app.settings = saved;
+    FM.people.load(saved);
 
-    const printers = await window.fastmike.listPrinters();
+    printerList = await window.fastmike.listPrinters();
+    buildPrinterOptions();
 
-    // With nothing saved yet, pick the event printer rather than whatever
-    // Windows has set as default (usually an office laser or a PDF writer).
+    renderTabs();
+    renderOriginals();
+    renderEdited();
+    syncPrinterForActive();
+  }
+
+  /**
+   * With nothing saved yet, pick the event printer rather than whatever Windows
+   * has set as default - that is usually an office laser or a PDF writer.
+   */
+  function defaultPrinterFor(index) {
     const isPhotoPrinter = (p) =>
       /\b(dnp|citizen|ds620|ds820|rx1|cx-?0?2|cy-?0?2|qw410|sinfonia|mitsubishi)\b/i
         .test((p.displayName || '') + ' ' + p.name);
-    const preferred = printers.find(isPhotoPrinter);
+    const photo = printerList.filter(isPhotoPrinter);
 
+    // several photographers, several dye-subs: hand them out one each rather
+    // than pointing everybody at the same machine
+    if (photo.length) return (photo[index % photo.length] || photo[0]).name;
+    const def = printerList.find((p) => p.isDefault);
+    return def ? def.name : '';
+  }
+
+  function buildPrinterOptions() {
+    if (!printerList.length) {
+      el.printerSelect.innerHTML = '<option value="__dialog__">No printers found</option>';
+      return;
+    }
     const opts = ['<option value="__dialog__">Ask each time (system dialog)</option>'];
-    printers.forEach((p) => {
-      const name = p.displayName || p.name;
-      const chosen = app.settings.printer
-        ? p.name === app.settings.printer
-        : (preferred ? p.name === preferred.name : p.isDefault);
-      opts.push(`<option value="${p.name}"${chosen ? ' selected' : ''}>${name}</option>`);
+    printerList.forEach((p) => {
+      opts.push(`<option value="${escapeHtml(p.name)}">${escapeHtml(p.displayName || p.name)}</option>`);
     });
     el.printerSelect.innerHTML = opts.join('');
-    if (typeof app.settings.silent === 'boolean') el.silent.checked = app.settings.silent;
+  }
 
-    if (!printers.length) {
-      el.printerSelect.innerHTML = '<option value="__dialog__">No printers found</option>';
+  /** Point the printer control at whoever's tab is open. */
+  function syncPrinterForActive() {
+    if (!DESKTOP) return;
+    const who = FM.people.active();
+    const index = FM.people.list().indexOf(who);
+
+    if (!who.printer) {
+      const guess = defaultPrinterFor(index);
+      if (guess) FM.people.setPrinter(who.id, guess);
     }
+
+    const has = Array.from(el.printerSelect.options).some((o) => o.value === who.printer);
+    el.printerSelect.value = has && who.printer ? who.printer : '__dialog__';
+    el.silent.checked = who.silent !== false;
+    el.printerLabel.textContent = 'Printer for ' + who.name;
   }
 
   function saveSettings() {
     if (!DESKTOP) return;
-    app.settings.printer = el.printerSelect.value === '__dialog__' ? '' : el.printerSelect.value;
-    app.settings.silent = el.silent.checked;
+    app.settings = Object.assign({}, app.settings, FM.people.toJSON());
     window.fastmike.setSettings(app.settings);
   }
 
-  el.printerSelect.addEventListener('change', saveSettings);
-  el.silent.addEventListener('change', saveSettings);
+  el.printerSelect.addEventListener('change', () => {
+    const who = FM.people.active();
+    FM.people.setPrinter(who.id, el.printerSelect.value === '__dialog__' ? '' : el.printerSelect.value);
+    renderTabs();
+    saveSettings();
+  });
+
+  el.silent.addEventListener('change', () => {
+    FM.people.setSilent(FM.people.active().id, el.silent.checked);
+    saveSettings();
+  });
 
   /* --------------------------------------------------------------- wiring */
 
@@ -745,6 +1035,9 @@
   $('btnExport').addEventListener('click', exportEdited);
   $('btnClearEdited').addEventListener('click', clearEdited);
   $('btnRotateFrame').addEventListener('click', rotateFrame);
+  $('btnAddPerson').addEventListener('click', addPerson);
+  $('btnSpooler').addEventListener('click', openSpooler);
+  $('btnClearDone').addEventListener('click', () => { FM.printing.clearFinished(); renderSpooler(); });
   $('zoomIn').addEventListener('click', () => setZoom((current() ? current().state.zoom : 1) * 1.15));
   $('zoomOut').addEventListener('click', () => setZoom((current() ? current().state.zoom : 1) / 1.15));
   el.zoom.addEventListener('input', (e) => setZoom(+e.target.value / 100));
@@ -759,7 +1052,25 @@
       if (!diag.hidden) showDiagnostics();
       return;
     }
-    if (!el.modal.hidden && e.key === 'Escape') return closeModal();
+    // While a sheet is open it owns the keyboard. Without this, pressing Enter
+    // to confirm a photographer's name would also fire the Enter shortcut
+    // behind it and push a photo into Edited.
+    if (!el.spooler.hidden) {
+      if (e.key === 'Escape') el.spooler.hidden = true;
+      return;
+    }
+    if (!el.modal.hidden) {
+      if (e.key === 'Escape') closeModal();
+      return;
+    }
+
+    // Ctrl+1..9 jumps between photographers without reaching for the mouse
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key >= '1' && e.key <= '9') {
+      const p = FM.people.list()[+e.key - 1];
+      if (p) { e.preventDefault(); switchTo(p.id); }
+      return;
+    }
+
     const tag = document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
       if (e.key !== 'Enter') return;
@@ -810,6 +1121,7 @@
 
   buildSliders();
   layout();
+  renderTabs();
   renderEdited();
   renderOriginals();
   syncFrameLabel();
@@ -822,6 +1134,8 @@
   window.__fastmikeInternals = {
     preview, exporter, layout, render, draw, addToEdited, printAll, rotateFrame,
     setAdjust, wheelKeyFor, WHEEL_KEYS, perf,
+    people: FM.people, switchTo, renderTabs, renderSpooler, openSpooler,
+    syncPrinterForActive, saveSettings,
     renderScale: () => renderScale,
     setInteractiveScale: (s) => { interactiveScale = s; }
   };

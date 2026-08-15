@@ -13,16 +13,25 @@
 
   <div class="topright">
     <label class="field">
-      <span>Printer</span>
+      <span id="printerLabel">Printer</span>
       <select id="printerSelect"><option>Loading&hellip;</option></select>
     </label>
     <label class="check" title="Once the printer is set up for the event, jobs go straight to it with no dialog.">
       <input type="checkbox" id="silentPrint" checked> Print without asking
     </label>
-    <span id="queueTag" class="queuetag" hidden></span>
+    <button id="btnSpooler" class="btn btn-ghost" title="Everything sent to the printers">
+      Print Queue <span id="queueTag" class="queuetag" hidden></span>
+    </button>
     <button id="btnPrint" class="btn btn-red">Print</button>
   </div>
 </header>
+
+<!-- one tab per photographer - spec 17 / 18 -->
+<nav class="tabbar">
+  <div id="tablist" class="tablist"></div>
+  <button id="btnAddPerson" class="tab-add" title="Add another photographer">+ Photographer</button>
+  <span class="tabhint">Each photographer keeps his own photos and his own printer</span>
+</nav>
 
 <main class="layout">
 
@@ -109,6 +118,7 @@
       <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Wheel</kbd><span>shadows</span></li>
       <li><kbd>Enter</kbd><span>add to edited, next photo</span></li>
       <li><kbd>&uarr;</kbd><kbd>&darr;</kbd><span>previous / next photo</span></li>
+      <li><kbd>Ctrl</kbd>+<kbd>1</kbd>&hellip;<kbd>9</kbd><span>switch photographer</span></li>
       <li><kbd>F2</kbd><span>speed &amp; graphics info</span></li>
     </ul>
     <div class="copied" id="copiedTag" hidden>Adjustments copied &mdash; Ctrl+V on the next photo</div>
@@ -124,12 +134,25 @@
   </div>
 </div>
 
+<!-- print queue -->
+<div id="spooler" class="modal" hidden>
+  <div class="sheet wide-sheet">
+    <h3>Print Queue</h3>
+    <div id="spoolerBody" class="spool-body"></div>
+    <div class="sheet-foot">
+      <button id="btnClearDone" class="btn btn-ghost">Clear finished</button>
+      <button class="btn" data-close>Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 <input id="webFilePicker" type="file" accept="image/*" multiple hidden>
 
 <script src="engine.js"></script>
 <script src="crop.js"></script>
 <script src="photos.js"></script>
+<script src="photographers.js"></script>
 <script src="printing.js"></script>
 <script src="app.js"></script>
 </body>

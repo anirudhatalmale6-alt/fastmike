@@ -42,6 +42,8 @@ window.FM = window.FM || {};
     return { blob, wMm: mm.w, hMm: mm.h };
   }
 
+  const round1 = (n) => String(Math.round(n * 10) / 10);
+
   function blobToDataUrl(blob) {
     return new Promise((resolve) => {
       const fr = new FileReader();
@@ -87,20 +89,35 @@ window.FM = window.FM || {};
    * Printing must never hold up editing. Jobs go on a queue and are handed to
    * the printer one at a time in the background while the operator carries on
    * with the next photograph.
+   *
+   * Every job keeps the photographer it came from and the printer it is bound
+   * for, so several photographers can be sending pages at once and each page
+   * still comes out of the right machine. The finished jobs are kept as well -
+   * that is what the print queue window shows, and it is the only way to tell
+   * afterwards whether a photograph actually went out.
    */
-  const queue = [];
-  let running = false;
+  const jobs = [];                // every job this session, oldest first
+  let running = null;
   let watcher = function () {};
+  let jobSeq = 0;
 
   function onQueueChange(fn) { watcher = fn; }
 
+  const isPending = (j) => j.status === 'queued' || j.status === 'printing';
+
   function queueStatus() {
+    const waiting = jobs.filter(isPending);
     return {
-      jobs: queue.length + (running ? 1 : 0),
-      pages: queue.reduce((n, g) => n + g.pages, 0) + (running ? running.pages : 0),
-      busy: !!running
+      jobs: waiting.length,
+      pages: waiting.reduce((n, j) => n + j.pages, 0),
+      busy: !!running,
+      failed: jobs.filter((j) => j.status === 'failed').length,
+      done: jobs.filter((j) => j.status === 'done').length
     };
   }
+
+  /** Job list for the print queue window, newest first. */
+  function jobList() { return jobs.slice().reverse(); }
 
   /** Hand one page-size group to the printer. Replaceable for testing. */
   async function dispatch(group, opts) {
@@ -120,18 +137,28 @@ window.FM = window.FM || {};
 
   async function pump() {
     if (running) return;
-    while (queue.length) {
-      running = queue.shift();
+    let job;
+    while ((job = jobs.find((j) => j.status === 'queued'))) {
+      running = job;
+      job.status = 'printing';
+      job.startedAt = Date.now();
       watcher(queueStatus());
       try {
-        const res = await FM.printing.dispatch(running.group, running.opts);
-        if (!res || !res.success) {
-          watcher(queueStatus(), { error: (res && res.reason) || 'print cancelled' });
+        const res = await FM.printing.dispatch(job.group, job.opts);
+        if (res && res.success) {
+          job.status = 'done';
+        } else {
+          job.status = 'failed';
+          job.error = (res && res.reason) || 'print cancelled';
+          watcher(queueStatus(), { error: job.error, job });
         }
       } catch (err) {
-        watcher(queueStatus(), { error: err.message });
+        job.status = 'failed';
+        job.error = err.message;
+        watcher(queueStatus(), { error: job.error, job });
       }
-      running = false;
+      job.finishedAt = Date.now();
+      running = null;
       watcher(queueStatus());
     }
   }
@@ -139,14 +166,58 @@ window.FM = window.FM || {};
   /** Queue photos for printing and return immediately. */
   function send(entries, opts) {
     if (!entries.length) return { queued: 0 };
+    opts = opts || {};
 
     if (!DESKTOP) return sendNow(entries, opts);
 
-    const jobs = plan(entries).map((group) => ({ group, opts, pages: group.pages }));
-    queue.push(...jobs);
+    const made = plan(entries).map((group) => ({
+      id: 'j' + (++jobSeq),
+      group,
+      opts,
+      pages: group.pages,
+      photographer: opts.photographer || '',
+      colour: opts.colour || '',
+      printer: opts.printer || 'system dialog',
+      names: group.items.map((e) => e.name),
+      // 152.4 rather than 152.39999999999998 - it is a label, not a measurement
+      size: round1(group.wMm) + ' × ' + round1(group.hMm) + ' mm',
+      status: 'queued',
+      queuedAt: Date.now()
+    }));
+
+    jobs.push(...made);
     watcher(queueStatus());
     pump();
-    return { queued: jobs.reduce((n, j) => n + j.pages, 0) };
+    return { queued: made.reduce((n, j) => n + j.pages, 0) };
+  }
+
+  /** Put a failed job back on the queue - usually the printer just ran out. */
+  function retry(id) {
+    const j = jobs.find((x) => x.id === id && x.status === 'failed');
+    if (!j) return false;
+    j.status = 'queued';
+    j.error = null;
+    j.queuedAt = Date.now();
+    watcher(queueStatus());
+    pump();
+    return true;
+  }
+
+  /** Drop a job that has not started yet. */
+  function cancel(id) {
+    const i = jobs.findIndex((x) => x.id === id && x.status === 'queued');
+    if (i < 0) return false;
+    jobs.splice(i, 1);
+    watcher(queueStatus());
+    return true;
+  }
+
+  /** Clear the finished and failed rows so the window stays readable. */
+  function clearFinished() {
+    for (let i = jobs.length - 1; i >= 0; i--) {
+      if (!isPending(jobs[i])) jobs.splice(i, 1);
+    }
+    watcher(queueStatus());
   }
 
   /** Browser demo path - straight to the browser's own print dialog. */
@@ -196,7 +267,8 @@ window.FM = window.FM || {};
 
   FM.printing = {
     BATCH, init, renderToPrint, groups, plan, send, dispatch,
-    onQueueChange, queueStatus, exportFiles, blobToDataUrl
+    onQueueChange, queueStatus, jobList, retry, cancel, clearFinished,
+    exportFiles, blobToDataUrl
   };
 
 })(window.FM);
