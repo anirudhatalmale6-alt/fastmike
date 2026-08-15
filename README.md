@@ -40,7 +40,8 @@ npx http-server . -p 8080
 ```
 
 In browser mode there is no folder import and no direct printer selection — the
-browser's own print dialog is used. Everything else is identical.
+browser's own print dialog is used, and printing is not split per printer.
+Everything else is identical.
 
 ---
 
@@ -48,7 +49,7 @@ browser's own print dialog is used. Everything else is identical.
 
 | Area | What it does |
 |---|---|
-| **Left — Actions** | Import Photos, Import Folder, Clear Session. Nothing that belongs on a keyboard shortcut. |
+| **Left — Actions** | Get New Photos (once a folder is set), Import Photos, Import Folder, Clear Session. Nothing that belongs on a keyboard shortcut. |
 | **Left — Original Photos** | Imported photos as thumbnails. Click to select; the selected one gets a red border. A tick marks photos already sent to Edited. |
 | **Centre — Editing Area** | Large preview with the **fixed** 15×20 crop frame. The frame never moves — the photo moves behind it, and everything outside it is hidden, so what you see is exactly what prints. |
 | **Bottom — Edited Photos** | Print-ready versions, five across, two rows. Each has its own print button. |
@@ -119,9 +120,12 @@ Each photo is laid out on its own page at exactly its own size with zero margins
 the printer driver never rescales the crop. Portrait and landscape photos are sent as
 separate jobs, because a single job cannot mix page sizes.
 
-Printing never blocks editing. Jobs go onto a queue and are handed to the printer one
-at a time in the background; a small "printing N pages" badge appears next to the
-Print button while the queue drains.
+Printing never blocks editing. Jobs go onto a queue and are handed out in the
+background while you carry on editing.
+
+There is **one queue per printer**. Two dye-subs run at the same time — a job for the
+DNP never sits waiting behind a job for the Citizen. Two photographers pointed at the
+*same* printer take turns, because a printer can only do one thing at a time.
 
 ## Paper
 
@@ -148,6 +152,17 @@ instantly, and nothing is copied or reloaded.
 - **Clear Session** only clears the photographer whose tab is open. The others keep
   working.
 
+### His own folder
+
+Each photographer shoots into his own folder. **Import Folder** picks it once and the
+tab remembers it; from then on **Get New Photos** reads that folder again with one
+click — no dialog, no chance of opening the wrong folder at eleven at night with a
+queue of people waiting.
+
+It only brings in what is not already on the tab, so it can be pressed as often as you
+like as new frames land. If the folder has been moved or unplugged it says so rather
+than quietly importing nothing.
+
 Anything printed goes to the printer belonging to whoever's tab is open, so two
 photographers can be sending pages at the same time and each set comes out of the
 right machine.
@@ -165,7 +180,8 @@ On first run, if no printer has been chosen yet, FastMike looks for DNP, Citizen
 Sinfonia or Mitsubishi units rather than the Windows default — which at a venue is
 usually an office laser or a PDF writer. With several dye-subs attached and several
 photographers set up, they are handed out one each rather than all pointing at the
-same machine.
+same machine. Two photographers can share one printer — that is normal with three
+photographers and two printers, and the queue handles it.
 
 ## Print queue
 

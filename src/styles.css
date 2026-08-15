@@ -301,6 +301,17 @@ button, input, select { font: inherit; color: inherit; }
 }
 .thumb.edited-done .done { display: flex; }
 
+.folder-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 0 2px 2px;
+  margin-top: -4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
 .empty { margin: auto; text-align: center; color: #5f5f5f; font-size: 12px; padding: 22px 10px; }
 .empty p { margin: 0; }
 

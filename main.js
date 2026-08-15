@@ -107,8 +107,26 @@ ipcMain.handle('import:folder', async () => {
     title: 'Import folder',
     properties: ['openDirectory']
   });
-  if (res.canceled) return [];
-  return listImages(res.filePaths[0]);
+  if (res.canceled) return null;
+  const dir = res.filePaths[0];
+  return { dir, files: listImages(dir) };
+});
+
+/**
+ * Re-read a folder that was chosen earlier.
+ *
+ * Each photographer shoots into his own folder on the desktop, so at an event
+ * the folder is picked once and then pulled from again and again as new frames
+ * land in it. No dialog - the wrong folder at eleven at night with a queue of
+ * people waiting is exactly the mistake this avoids.
+ */
+ipcMain.handle('import:folder-at', async (_e, dir) => {
+  try {
+    if (!fs.statSync(dir).isDirectory()) return { dir, files: [], missing: true };
+    return { dir, files: listImages(dir) };
+  } catch (_) {
+    return { dir, files: [], missing: true };
+  }
 });
 
 /* ------------------------------------------------------------------ */

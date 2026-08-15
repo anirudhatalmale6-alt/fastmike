@@ -268,10 +268,56 @@
     if (picked) await addPhotos(picked);
   }
 
+  /**
+   * Choose this photographer's folder. It is remembered against his tab, so
+   * from then on new frames come in with one click and no file browser.
+   */
   async function importFolder() {
     const picked = await FM.photos.pickFolder();
-    if (picked) await addPhotos(picked);
-    else if (!DESKTOP) toast('Folder import is available in the desktop build', true);
+    if (!picked) {
+      if (!DESKTOP) toast('Folder import is available in the desktop build', true);
+      return;
+    }
+    FM.people.setFolder(FM.people.active().id, picked.dir);
+    syncFolderButton();
+    saveSettings();
+    await addPhotos(onlyNew(picked.files));
+  }
+
+  /** Everything in the folder that is not already on this photographer's tab. */
+  function onlyNew(files) {
+    const have = new Set(app.photos.map((p) => p.path).filter(Boolean));
+    return (files || []).filter((f) => !have.has(f.path));
+  }
+
+  /** Read his folder again - only what has landed in it since last time. */
+  async function importAgain() {
+    const who = FM.people.active();
+    if (!who.folder) return;
+
+    const res = await FM.photos.readFolder(who.folder);
+    if (!res || res.missing) {
+      return toast('Cannot find ' + who.folder + ' any more - pick the folder again', true);
+    }
+    const fresh = onlyNew(res.files);
+    if (!fresh.length) {
+      return toast('Nothing new in ' + FM.photos.folderName(who.folder) + ' yet');
+    }
+    await addPhotos(fresh);
+  }
+
+  function syncFolderButton() {
+    const who = FM.people.active();
+    const btn = $('btnImportAgain');
+    const note = $('folderNote');
+    const has = DESKTOP && !!who.folder;
+
+    btn.hidden = !has;
+    note.hidden = !has;
+    if (has) {
+      note.textContent = who.name + "'s folder: " + FM.photos.folderName(who.folder);
+      note.title = who.folder;
+    }
   }
 
   el.webPicker.addEventListener('change', async () => {
@@ -345,6 +391,7 @@
     renderOriginals();
     renderEdited();
     syncPrinterForActive();
+    syncFolderButton();
 
     const i = app.selected;
     if (i >= 0 && i < app.photos.length) {
@@ -375,7 +422,7 @@
     const p = FM.people.byId(id);
     if (!p) return;
     openPrompt('Rename photographer', p.name, 'Rename', (name) => {
-      if (FM.people.rename(id, name)) { renderTabs(); saveSettings(); }
+      if (FM.people.rename(id, name)) { renderTabs(); syncFolderButton(); saveSettings(); }
     });
   }
 
@@ -399,6 +446,7 @@
             renderOriginals();
             renderEdited();
             syncPrinterForActive();
+            syncFolderButton();
             if (app.photos.length) {
               const i = Math.min(app.photos.length - 1, Math.max(0, app.selected));
               app.selected = -1;
@@ -958,6 +1006,7 @@
     renderOriginals();
     renderEdited();
     syncPrinterForActive();
+    syncFolderButton();
   }
 
   /**
@@ -1028,6 +1077,7 @@
 
   $('btnImportFiles').addEventListener('click', importFiles);
   $('btnImportFolder').addEventListener('click', importFolder);
+  $('btnImportAgain').addEventListener('click', importAgain);
   $('btnClearAll').addEventListener('click', clearAll);
   $('btnAdd').addEventListener('click', addToEdited);
   $('btnPrint').addEventListener('click', printAll);
@@ -1135,6 +1185,7 @@
     preview, exporter, layout, render, draw, addToEdited, printAll, rotateFrame,
     setAdjust, wheelKeyFor, WHEEL_KEYS, perf,
     people: FM.people, switchTo, renderTabs, renderSpooler, openSpooler,
+    importFolder, importAgain, onlyNew, syncFolderButton,
     syncPrinterForActive, saveSettings,
     renderScale: () => renderScale,
     setInteractiveScale: (s) => { interactiveScale = s; }

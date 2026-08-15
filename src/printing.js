@@ -97,7 +97,7 @@ window.FM = window.FM || {};
    * afterwards whether a photograph actually went out.
    */
   const jobs = [];                // every job this session, oldest first
-  let running = null;
+  const busy = new Set();         // printers currently mid-job
   let watcher = function () {};
   let jobSeq = 0;
 
@@ -105,12 +105,16 @@ window.FM = window.FM || {};
 
   const isPending = (j) => j.status === 'queued' || j.status === 'printing';
 
+  /** Jobs are queued per printer, so the key is the printer, not the job. */
+  const laneOf = (j) => j.printer || '__dialog__';
+
   function queueStatus() {
     const waiting = jobs.filter(isPending);
     return {
       jobs: waiting.length,
       pages: waiting.reduce((n, j) => n + j.pages, 0),
-      busy: !!running,
+      busy: busy.size > 0,
+      printers: busy.size,
       failed: jobs.filter((j) => j.status === 'failed').length,
       done: jobs.filter((j) => j.status === 'done').length
     };
@@ -135,11 +139,21 @@ window.FM = window.FM || {};
     });
   }
 
-  async function pump() {
-    if (running) return;
+  /**
+   * One worker per printer.
+   *
+   * A venue has two dye-subs and up to three photographers, so a job for the
+   * DNP must not sit behind a job for the Citizen - both machines should be
+   * running. Two photographers pointed at the SAME printer still take turns,
+   * because a printer can only do one thing at a time.
+   */
+  async function pumpLane(lane) {
+    if (busy.has(lane)) return;
+    busy.add(lane);
+    watcher(queueStatus());
+
     let job;
-    while ((job = jobs.find((j) => j.status === 'queued'))) {
-      running = job;
+    while ((job = jobs.find((j) => j.status === 'queued' && laneOf(j) === lane))) {
       job.status = 'printing';
       job.startedAt = Date.now();
       watcher(queueStatus());
@@ -158,9 +172,17 @@ window.FM = window.FM || {};
         watcher(queueStatus(), { error: job.error, job });
       }
       job.finishedAt = Date.now();
-      running = null;
       watcher(queueStatus());
     }
+
+    busy.delete(lane);
+    watcher(queueStatus());
+  }
+
+  function pump() {
+    // start a worker for every printer that has something waiting
+    const lanes = new Set(jobs.filter((j) => j.status === 'queued').map(laneOf));
+    lanes.forEach((lane) => { pumpLane(lane); });
   }
 
   /** Queue photos for printing and return immediately. */

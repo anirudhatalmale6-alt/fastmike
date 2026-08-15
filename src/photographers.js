@@ -37,6 +37,10 @@ window.FM = window.FM || {};
       printer: '',
       silent: true,
 
+      // his own folder on the desktop - chosen once, then pulled from again
+      // and again as new frames land in it
+      folder: '',
+
       // his working set - the shell reads these through app.photos etc
       photos: [],
       selected: -1,
@@ -86,6 +90,14 @@ window.FM = window.FM || {};
     return true;
   }
 
+  function setFolder(id, folder) {
+    const p = byId(id);
+    if (!p) return false;
+    p.folder = folder || '';
+    changed();
+    return true;
+  }
+
   function setSilent(id, silent) {
     const p = byId(id);
     if (!p) return false;
@@ -122,7 +134,8 @@ window.FM = window.FM || {};
   function toJSON() {
     return {
       photographers: people.map((p) => ({
-        id: p.id, name: p.name, colour: p.colour, printer: p.printer, silent: p.silent
+        id: p.id, name: p.name, colour: p.colour,
+        printer: p.printer, silent: p.silent, folder: p.folder
       })),
       activePhotographer: activeId
     };
@@ -144,6 +157,7 @@ window.FM = window.FM || {};
       if (r.id) p.id = r.id;
       p.printer = r.printer || '';
       p.silent = r.silent !== false;
+      p.folder = r.folder || '';
       people.push(p);
     });
 
@@ -163,7 +177,7 @@ window.FM = window.FM || {};
 
   FM.people = {
     COLOURS, list, active, byId, setActive, add, rename, remove,
-    setPrinter, setSilent, toJSON, load, onChange,
+    setPrinter, setSilent, setFolder, toJSON, load, onChange,
     get activeId() { return activeId; }
   };
 

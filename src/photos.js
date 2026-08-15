@@ -135,14 +135,28 @@ window.FM = window.FM || {};
     return null;             // the change handler takes over
   }
 
+  /** Choose a folder. Returns {dir, files} so the folder can be remembered. */
   async function pickFolder() {
     if (!DESKTOP) return null;
     return window.fastmike.importFolder();
   }
 
+  /** Read a folder chosen earlier, without showing a dialog. */
+  async function readFolder(dir) {
+    if (!DESKTOP || !dir) return null;
+    return window.fastmike.importFolderAt(dir);
+  }
+
+  /** The last part of a path, for showing the folder name rather than the path. */
+  function folderName(dir) {
+    if (!dir) return '';
+    const parts = String(dir).split(/[\\/]/).filter(Boolean);
+    return parts[parts.length - 1] || dir;
+  }
+
   FM.photos = {
     DESKTOP, NEUTRAL, PREVIEW_MAX, newState, loadImage, makeThumb, dimsOf,
-    previewCopy, openImage, build, pickFiles, pickFolder
+    previewCopy, openImage, build, pickFiles, pickFolder, readFolder, folderName
   };
 
 })(window.FM);

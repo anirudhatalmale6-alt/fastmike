@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('fastmike', {
 
   importFiles: () => ipcRenderer.invoke('import:files'),
   importFolder: () => ipcRenderer.invoke('import:folder'),
+  importFolderAt: (dir) => ipcRenderer.invoke('import:folder-at', dir),
 
   // reads straight off disk - originals are opened read-only, never written
   readImageBytes: (p) => ipcRenderer.invoke('image:bytes', p),
