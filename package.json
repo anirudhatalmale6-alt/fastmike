@@ -1,6 +1,6 @@
 {
   "name": "fastmike",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "FastMike - fast photo editing and instant printing for event photographers",
   "main": "main.js",
   "scripts": {

@@ -49,6 +49,7 @@ Everything else is identical.
 
 | Area | What it does |
 |---|---|
+| **Top right** | Printers…, Print Queue, and one **Print** button per printer. |
 | **Left — Actions** | Get New Photos (once a folder is set), Import Photos, Import Folder, Clear Session. Nothing that belongs on a keyboard shortcut. |
 | **Left — Original Photos** | Imported photos as thumbnails. Click to select; the selected one gets a red border. A tick marks photos already sent to Edited. |
 | **Centre — Editing Area** | Large preview with the **fixed** 15×20 crop frame. The frame never moves — the photo moves behind it, and everything outside it is hidden, so what you see is exactly what prints. |
@@ -108,10 +109,19 @@ every shot.
 
 ## Printing
 
-**Individual** — every edited photo has its own print button. It asks how many
-copies (1–5) and sends them straight out, without interrupting what you are editing.
+### Which printer
 
-**Batch** — the main Print button. Photos are organised into groups of ten:
+There is a **Print button for every printer**, on every photographer's tab —
+*Print DNP DS620*, *Print Citizen CX02*. The printer is chosen at the moment of
+printing, not fixed to a photographer, because the choice is usually about which
+machine is free: the DNP already has ten pages queued, so the next lot goes to the
+Citizen.
+
+**Individual** — every edited photo has its own print button. It asks which printer
+and how many copies (1–5) in one sheet, one click, and sends them straight out
+without interrupting what you are editing.
+
+**Batch** — the Print button for that printer. Photos are organised into groups of ten:
 
 - 7 photos → prints all seven immediately, no dialog
 - 14 photos → offers exactly three choices: *Print 1–10*, *Print 11–14*, *Print All (14)*
@@ -124,8 +134,9 @@ Printing never blocks editing. Jobs go onto a queue and are handed out in the
 background while you carry on editing.
 
 There is **one queue per printer**. Two dye-subs run at the same time — a job for the
-DNP never sits waiting behind a job for the Citizen. Two photographers pointed at the
-*same* printer take turns, because a printer can only do one thing at a time.
+DNP never sits waiting behind a job for the Citizen, even when both were sent by the
+same photographer. Two batches aimed at the *same* printer take turns, because a
+printer can only do one thing at a time.
 
 ## Paper
 
@@ -142,8 +153,9 @@ leave a sliver of unprinted paper along one edge.
 ## Several photographers on one laptop
 
 Each photographer gets a tab along the top. A tab holds **his own imported photos, his
-own edited set, and his own printer** — clicking a name swaps the whole working view
-instantly, and nothing is copied or reloaded.
+own edited set and his own folder** — clicking a name swaps the whole working view
+instantly, and nothing is copied or reloaded. The printers are *not* per photographer;
+every tab can reach every machine.
 
 - **+ Photographer** adds one. Double-click a tab to rename, the `×` removes.
 - `Ctrl+1` … `Ctrl+9` jump between them without touching the mouse.
@@ -163,25 +175,23 @@ It only brings in what is not already on the tab, so it can be pressed as often 
 like as new frames land. If the folder has been moved or unplugged it says so rather
 than quietly importing nothing.
 
-Anything printed goes to the printer belonging to whoever's tab is open, so two
-photographers can be sending pages at the same time and each set comes out of the
-right machine.
-
-The photographers and their printers are written to disk, not the photographs. If the
-app is restarted in the middle of an event, the setup is still there.
+The photographers, their folders and the printers are written to disk, not the
+photographs. If the app is restarted in the middle of an event, the setup is still
+there.
 
 ## Printer setup
 
-Choose the printer once per photographer, in the top right, and tick **Print without
-asking**. The choice is saved to disk and restored next time, so nothing has to be
-picked again mid-event.
+**Printers…** in the top right lists the machines standing at this event. Each one
+gets its own Print button on every tab. Per printer you can:
 
-On first run, if no printer has been chosen yet, FastMike looks for DNP, Citizen,
-Sinfonia or Mitsubishi units rather than the Windows default — which at a venue is
-usually an office laser or a PDF writer. With several dye-subs attached and several
-photographers set up, they are handed out one each rather than all pointing at the
-same machine. Two photographers can share one printer — that is normal with three
-photographers and two printers, and the queue handles it.
+- **rename the button** — the driver calls it `CITIZEN CX-02 Series`; the button can
+  say *Citizen CX02*
+- untick **straight to the printer** to get the Windows print dialog for that machine
+  instead, leaving the other one printing silently
+
+On first run FastMike puts the DNP, Citizen, Sinfonia, HiTi and Mitsubishi units it
+finds on the bar and ignores the Windows default — at a venue that default is usually
+an office laser or a PDF writer. Nothing has to be set up before the first print.
 
 ## Print queue
 
@@ -201,7 +211,8 @@ cancelled. The badge on the button turns red when something has failed.
 | `↑ ↓ ← →` | previous / next photo |
 | `Enter` | add current photo to Edited and jump to the next |
 | `Ctrl+C` / `Ctrl+V` | copy / paste adjustments |
-| `Ctrl+P` | print |
+| `Ctrl+P` | print — first printer |
+| `Ctrl+Shift+P` | print — second printer |
 | `Ctrl+O` | import photos |
 | `Ctrl+1` … `Ctrl+9` | switch photographer |
 | `R` | rotate frame 90° |
@@ -269,6 +280,8 @@ preload.js       the only bridge between the interface and the machine
 src/engine.js    preview rendering (GPU shader + CPU fallback + surface swap)
 src/crop.js      crop positioning, frame geometry, zoom-about-pointer
 src/photos.js    image loading and thumbnails
+src/photographers.js  one tab each - his photos, his edited set, his folder
+src/printers.js  the printers standing at this event, and their buttons
 src/printing.js  full-resolution print render, batching, print jobs, export
 src/app.js       interface, state and event wiring
 ```

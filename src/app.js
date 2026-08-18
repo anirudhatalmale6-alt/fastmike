@@ -61,15 +61,13 @@
     zoom: $('zoom'),
     toast: $('toast'),
     copiedTag: $('copiedTag'),
-    printerSelect: $('printerSelect'),
-    silent: $('silentPrint'),
+    printBar: $('printBar'),
     webPicker: $('webFilePicker'),
     frameFormat: $('frameFormat'),
     modal: $('modal'),
     modalTitle: $('modalTitle'),
     modalBody: $('modalBody'),
     tablist: $('tablist'),
-    printerLabel: $('printerLabel'),
     spooler: $('spooler'),
     spoolerBody: $('spoolerBody')
   };
@@ -101,6 +99,7 @@
   function openModal(title, choices) {
     el.modalTitle.textContent = title;
     el.modalBody.innerHTML = '';
+    el.modal.querySelector('.sheet').classList.remove('wide-sheet');
     choices.forEach((c) => {
       const b = document.createElement('button');
       b.className = 'btn ' + (c.primary ? 'btn-accent' : '') + ' wide';
@@ -114,6 +113,7 @@
   /** Same sheet, but asking for a word rather than a choice. */
   function openPrompt(title, value, okLabel, run) {
     el.modalTitle.textContent = title;
+    el.modal.querySelector('.sheet').classList.remove('wide-sheet');
     el.modalBody.innerHTML =
       '<input type="text" class="sheet-input" id="sheetInput" maxlength="24">';
     const input = $('sheetInput');
@@ -132,6 +132,15 @@
     el.modal.hidden = false;
     input.focus();
     input.select();
+  }
+
+  /** Same sheet again, but laid out by the caller rather than as a button list. */
+  function openSheet(title, html, wire, wideSheet) {
+    el.modalTitle.textContent = title;
+    el.modalBody.innerHTML = html;
+    el.modal.querySelector('.sheet').classList.toggle('wide-sheet', !!wideSheet);
+    if (wire) wire(el.modalBody);
+    el.modal.hidden = false;
   }
 
   function closeModal() { el.modal.hidden = true; }
@@ -341,7 +350,7 @@
       const waiting = p.edited.length;
       return `
       <div class="tab${p.id === activeId ? ' on' : ''}" data-id="${p.id}"
-           title="${escapeHtml(p.name)}${p.printer ? ' - ' + escapeHtml(p.printer) : ' - no printer set'}\nDouble-click to rename">
+           title="${escapeHtml(p.name)}${p.folder ? ' - ' + escapeHtml(FM.photos.folderName(p.folder)) : ''}\nDouble-click to rename">
         <span class="dot" style="background:${p.colour}"></span>
         <span class="tab-name">${escapeHtml(p.name)}</span>
         ${waiting ? `<span class="tab-count">${waiting}</span>` : ''}
@@ -366,9 +375,6 @@
         removePerson(n.dataset.remove);
       });
     });
-
-    const who = FM.people.active();
-    el.printerLabel.textContent = 'Printer for ' + who.name;
   }
 
   function escapeHtml(s) {
@@ -390,7 +396,6 @@
     renderTabs();
     renderOriginals();
     renderEdited();
-    syncPrinterForActive();
     syncFolderButton();
 
     const i = app.selected;
@@ -414,7 +419,7 @@
       switchTo(p.id);
       renderOriginals();
       renderEdited();
-      toast(p.name + ' added - set his printer top right');
+      toast(p.name + ' added - point him at his folder on the left');
     });
   }
 
@@ -445,7 +450,6 @@
             app.loadToken++;
             renderOriginals();
             renderEdited();
-            syncPrinterForActive();
             syncFolderButton();
             if (app.photos.length) {
               const i = Math.min(app.photos.length - 1, Math.max(0, app.selected));
@@ -844,57 +848,123 @@
 
   /* -------------------------------------------------------------- printing */
 
+  const COPIES = [1, 2, 3, 4, 5];
+
+  /**
+   * One photo, sent on its own.
+   *
+   * Both questions are answered with one click - which machine, and how many.
+   * Which machine matters because the DNP may already have ten pages queued
+   * while the Citizen is standing idle.
+   */
   function askCopies(entry) {
     if (!entry) return;
-    const choices = [1, 2, 3, 4, 5].map((n) => ({
-      label: n === 1 ? '1 copy' : n + ' copies',
-      primary: n === 1,
-      run: () => doPrint([{ ...entry, copies: n }], n + ' × ' + entry.name)
-    }));
-    openModal('Print ' + entry.name, choices);
+    const printers = FM.printers.list();
+
+    if (!printers.length) {
+      return openModal('Print ' + entry.name, COPIES.map((n) => ({
+        label: n === 1 ? '1 copy' : n + ' copies',
+        primary: n === 1,
+        run: () => doPrint([{ ...entry, copies: n }], n + ' × ' + entry.name, '')
+      })));
+    }
+
+    const html = printers.map((p, i) => `
+      <div class="pick-row">
+        <div class="pick-name">${escapeHtml(p.label)}</div>
+        <div class="pick-btns">
+          ${COPIES.map((n) => `<button class="btn sq${n === 1 ? ' btn-accent' : ''}"
+             data-p="${i}" data-n="${n}" title="${n} cop${n === 1 ? 'y' : 'ies'} on ${escapeHtml(p.label)}">${n}</button>`).join('')}
+        </div>
+      </div>`).join('');
+
+    openSheet('Print ' + entry.name,
+      html + '<p class="hint sheet-hint">Pick the printer and the number of copies.</p>',
+      (body) => {
+        body.querySelectorAll('[data-n]').forEach((b) => {
+          b.addEventListener('click', () => {
+            const printer = printers[+b.dataset.p];
+            const n = +b.dataset.n;
+            closeModal();
+            doPrint([{ ...entry, copies: n }], n + ' × ' + entry.name, printer.name);
+          });
+        });
+      });
   }
 
-  function printAll() {
+  /** The whole Edited set, to whichever printer's button was pressed. */
+  function printAll(printerName) {
     if (!app.edited.length) return toast('Nothing in Edited Photos yet', true);
 
+    const where = FM.printers.count() ? ' on ' + FM.printers.labelFor(printerName) : '';
     const groups = FM.printing.groups(app.edited.length);
 
     // fewer than a full group - just print, no questions asked
     if (groups.length < 2) {
       return doPrint(app.edited.map((e) => ({ ...e, copies: 1 })),
-                     app.edited.length + ' photo(s)');
+                     app.edited.length + ' photo(s)', printerName);
     }
 
     const choices = groups.map((g) => ({
       label: 'Print ' + g.from + '–' + g.to,
       run: () => doPrint(app.edited.slice(g.start, g.end).map((e) => ({ ...e, copies: 1 })),
-                         'photos ' + g.from + '–' + g.to)
+                         'photos ' + g.from + '–' + g.to, printerName)
     }));
     choices.push({
       label: 'Print All (' + app.edited.length + ')',
       primary: true,
       run: () => doPrint(app.edited.map((e) => ({ ...e, copies: 1 })),
-                         'all ' + app.edited.length + ' photos')
+                         'all ' + app.edited.length + ' photos', printerName)
     });
 
-    openModal('Print ' + app.edited.length + ' photos', choices);
+    openModal('Print ' + app.edited.length + ' photos' + where, choices);
   }
 
   /**
    * Queue and return straight away - the operator keeps editing while pages go
-   * out in the background.
+   * out in the background. The job carries the photographer it came from, so
+   * the print queue can still say who sent it.
    */
-  function doPrint(entries, what) {
-    // whoever's tab is open owns this job, and it goes to his printer
+  function doPrint(entries, what, printerName) {
     const who = FM.people.active();
     const res = FM.printing.send(entries, {
-      printer: who.printer || '',
-      silent: who.silent !== false,
+      printer: printerName || '',
+      silent: printerName ? FM.printers.silentFor(printerName) : false,
+      printerLabel: FM.printers.labelFor(printerName),
       photographer: who.name,
       colour: who.colour
     });
     toast('Queued ' + what + ' for ' + who.name +
+          (printerName ? ' on ' + FM.printers.labelFor(printerName) : '') +
           (res.queued ? ' (' + res.queued + ' pages)' : ''));
+  }
+
+  /* ------------------------------------------------------------- print bar */
+
+  /**
+   * A Print button per printer, on every tab. This is the whole change: any
+   * photographer can send to either machine at any moment, and because the
+   * queues are per printer both machines run at once.
+   */
+  function renderPrintBar() {
+    const printers = FM.printers.list();
+
+    el.printBar.innerHTML = printers.length
+      ? printers.map((p) => `
+          <button class="btn btn-red" data-print-to="${escapeHtml(p.name)}"
+                  title="Send the edited photos to ${escapeHtml(p.name)}">Print ${escapeHtml(p.label)}</button>`).join('')
+      : '<button class="btn btn-red" data-print-to="">Print</button>';
+
+    el.printBar.querySelectorAll('[data-print-to]').forEach((b) => {
+      b.addEventListener('click', () => printAll(b.dataset.printTo));
+    });
+
+    // keep the shortcut list honest about where Ctrl+P actually goes
+    const k1 = $('keyPrint1');
+    const k2 = $('keyPrint2');
+    k1.textContent = printers[0] ? 'print — ' + printers[0].label : 'print';
+    k2.parentElement.hidden = !printers[1];
+    if (printers[1]) k2.textContent = 'print — ' + printers[1].label;
   }
 
   FM.printing.onQueueChange((status, problem) => {
@@ -948,7 +1018,7 @@
         <span class="dot" style="background:${j.colour || '#666'}"></span>
         <div class="spool-main">
           <div class="spool-title">${escapeHtml(j.names.slice(0, 3).join(', '))}${j.names.length > 3 ? ' +' + (j.names.length - 3) + ' more' : ''}</div>
-          <div class="spool-sub">${escapeHtml(j.photographer || '—')} &middot; ${escapeHtml(j.printer)} &middot; ${j.pages} page${j.pages === 1 ? '' : 's'} &middot; ${j.size}</div>
+          <div class="spool-sub">${escapeHtml(j.photographer || '—')} &middot; ${escapeHtml(j.printerLabel || j.printer)} &middot; ${j.pages} page${j.pages === 1 ? '' : 's'} &middot; ${j.size}</div>
           ${j.error ? `<div class="spool-err">${escapeHtml(j.error)}</div>` : ''}
         </div>
         <div class="spool-right">
@@ -983,15 +1053,14 @@
 
   /* ------------------------------------------------- printer configuration */
 
-  let printerList = [];
+  let printerList = [];           // everything Windows knows about
 
   async function loadPrinters() {
     if (!DESKTOP) {
       FM.people.load({});
+      FM.printers.load({});
       renderTabs();
-      el.printerSelect.innerHTML = '<option value="__dialog__">Browser print dialog</option>';
-      el.silent.checked = false;
-      el.silent.disabled = true;
+      renderPrintBar();
       return;
     }
 
@@ -1000,78 +1069,92 @@
     FM.people.load(saved);
 
     printerList = await window.fastmike.listPrinters();
-    buildPrinterOptions();
+
+    // nothing saved yet - put the dye-subs on the bar rather than making him
+    // set up printers before he can print anything
+    if (!FM.printers.load(saved)) {
+      FM.printers.discover(printerList);
+      saveSettings();
+    }
 
     renderTabs();
+    renderPrintBar();
     renderOriginals();
     renderEdited();
-    syncPrinterForActive();
     syncFolderButton();
   }
 
   /**
-   * With nothing saved yet, pick the event printer rather than whatever Windows
-   * has set as default - that is usually an office laser or a PDF writer.
+   * Which printers are standing at this event. Set up once when the machines go
+   * on the table, and then never touched again all night.
    */
-  function defaultPrinterFor(index) {
-    const isPhotoPrinter = (p) =>
-      /\b(dnp|citizen|ds620|ds820|rx1|cx-?0?2|cy-?0?2|qw410|sinfonia|mitsubishi)\b/i
-        .test((p.displayName || '') + ' ' + p.name);
-    const photo = printerList.filter(isPhotoPrinter);
+  function openPrinterSetup() {
+    if (!DESKTOP) return toast('Printer setup is in the desktop build', true);
 
-    // several photographers, several dye-subs: hand them out one each rather
-    // than pointing everybody at the same machine
-    if (photo.length) return (photo[index % photo.length] || photo[0]).name;
-    const def = printerList.find((p) => p.isDefault);
-    return def ? def.name : '';
-  }
+    const inUse = FM.printers.list();
+    const rows = inUse.map((p) => `
+      <div class="pset-row" data-name="${escapeHtml(p.name)}">
+        <div class="pset-main">
+          <input type="text" class="sheet-input pset-label" maxlength="22"
+                 value="${escapeHtml(p.label)}" title="What the button says">
+          <div class="pset-sub" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+        </div>
+        <label class="check" title="Off means the Windows print dialog opens every time">
+          <input type="checkbox" class="pset-silent" ${p.silent !== false ? 'checked' : ''}> straight to the printer
+        </label>
+        <button class="btn btn-ghost sm pset-del">Remove</button>
+      </div>`).join('');
 
-  function buildPrinterOptions() {
-    if (!printerList.length) {
-      el.printerSelect.innerHTML = '<option value="__dialog__">No printers found</option>';
-      return;
-    }
-    const opts = ['<option value="__dialog__">Ask each time (system dialog)</option>'];
-    printerList.forEach((p) => {
-      opts.push(`<option value="${escapeHtml(p.name)}">${escapeHtml(p.displayName || p.name)}</option>`);
-    });
-    el.printerSelect.innerHTML = opts.join('');
-  }
+    const spare = printerList.filter((q) => !FM.printers.byName(q.name));
+    const addBox = spare.length
+      ? `<div class="pset-add">
+           <select id="psetPick">${spare.map((q) =>
+             `<option value="${escapeHtml(q.name)}">${escapeHtml(q.displayName || q.name)}</option>`).join('')}</select>
+           <button class="btn" id="psetAdd">Add printer</button>
+         </div>`
+      : '<p class="hint">Every printer Windows knows about is already on the bar.</p>';
 
-  /** Point the printer control at whoever's tab is open. */
-  function syncPrinterForActive() {
-    if (!DESKTOP) return;
-    const who = FM.people.active();
-    const index = FM.people.list().indexOf(who);
+    openSheet('Printers for this event',
+      (rows || '<p class="hint">No printers on the bar yet.</p>') + addBox +
+      '<p class="hint sheet-hint">Each one gets its own Print button, on every photographer\'s tab. ' +
+      'They print at the same time, so a batch on one machine never holds up the other.</p>',
+      (body) => {
+        body.querySelectorAll('.pset-row').forEach((row) => {
+          const name = row.dataset.name;
+          row.querySelector('.pset-label').addEventListener('change', (e) => {
+            if (FM.printers.rename(name, e.target.value)) { renderPrintBar(); saveSettings(); }
+          });
+          row.querySelector('.pset-silent').addEventListener('change', (e) => {
+            FM.printers.setSilent(name, e.target.checked);
+            saveSettings();
+          });
+          row.querySelector('.pset-del').addEventListener('click', () => {
+            FM.printers.remove(name);
+            renderPrintBar();
+            saveSettings();
+            openPrinterSetup();
+          });
+        });
 
-    if (!who.printer) {
-      const guess = defaultPrinterFor(index);
-      if (guess) FM.people.setPrinter(who.id, guess);
-    }
-
-    const has = Array.from(el.printerSelect.options).some((o) => o.value === who.printer);
-    el.printerSelect.value = has && who.printer ? who.printer : '__dialog__';
-    el.silent.checked = who.silent !== false;
-    el.printerLabel.textContent = 'Printer for ' + who.name;
+        const addBtn = body.querySelector('#psetAdd');
+        if (addBtn) {
+          addBtn.addEventListener('click', () => {
+            const pick = body.querySelector('#psetPick').value;
+            FM.printers.add(printerList.find((q) => q.name === pick));
+            renderPrintBar();
+            saveSettings();
+            openPrinterSetup();
+          });
+        }
+      }, true);
   }
 
   function saveSettings() {
     if (!DESKTOP) return;
-    app.settings = Object.assign({}, app.settings, FM.people.toJSON());
+    app.settings = Object.assign({}, app.settings,
+                                 FM.people.toJSON(), FM.printers.toJSON());
     window.fastmike.setSettings(app.settings);
   }
-
-  el.printerSelect.addEventListener('change', () => {
-    const who = FM.people.active();
-    FM.people.setPrinter(who.id, el.printerSelect.value === '__dialog__' ? '' : el.printerSelect.value);
-    renderTabs();
-    saveSettings();
-  });
-
-  el.silent.addEventListener('change', () => {
-    FM.people.setSilent(FM.people.active().id, el.silent.checked);
-    saveSettings();
-  });
 
   /* --------------------------------------------------------------- wiring */
 
@@ -1080,7 +1163,7 @@
   $('btnImportAgain').addEventListener('click', importAgain);
   $('btnClearAll').addEventListener('click', clearAll);
   $('btnAdd').addEventListener('click', addToEdited);
-  $('btnPrint').addEventListener('click', printAll);
+  $('btnPrinters').addEventListener('click', openPrinterSetup);
   $('btnFit').addEventListener('click', fit);
   $('btnExport').addEventListener('click', exportEdited);
   $('btnClearEdited').addEventListener('click', clearEdited);
@@ -1129,7 +1212,14 @@
 
     if (ctrl && e.key.toLowerCase() === 'c') { e.preventDefault(); return copySettings(); }
     if (ctrl && e.key.toLowerCase() === 'v') { e.preventDefault(); return pasteSettings(); }
-    if (ctrl && e.key.toLowerCase() === 'p') { e.preventDefault(); return printAll(); }
+    // Ctrl+P goes to the first printer, Ctrl+Shift+P to the second - the
+    // shortcut list on the right always says which is which
+    if (ctrl && e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      const bar = FM.printers.list();
+      const p = bar[e.shiftKey ? 1 : 0] || bar[0];
+      return printAll(p ? p.name : '');
+    }
     if (ctrl && e.key.toLowerCase() === 'o') { e.preventDefault(); return importFiles(); }
 
     switch (e.key) {
@@ -1172,6 +1262,7 @@
   buildSliders();
   layout();
   renderTabs();
+  renderPrintBar();
   renderEdited();
   renderOriginals();
   syncFrameLabel();
@@ -1184,9 +1275,12 @@
   window.__fastmikeInternals = {
     preview, exporter, layout, render, draw, addToEdited, printAll, rotateFrame,
     setAdjust, wheelKeyFor, WHEEL_KEYS, perf,
-    people: FM.people, switchTo, renderTabs, renderSpooler, openSpooler,
+    people: FM.people, printers: FM.printers,
+    switchTo, renderTabs, renderSpooler, openSpooler,
     importFolder, importAgain, onlyNew, syncFolderButton,
-    syncPrinterForActive, saveSettings,
+    renderPrintBar, openPrinterSetup, askCopies, saveSettings, loadPrinters,
+    printerList: () => printerList,
+    setPrinterList: (l) => { printerList = l; },
     renderScale: () => renderScale,
     setInteractiveScale: (s) => { interactiveScale = s; }
   };

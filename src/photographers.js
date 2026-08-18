@@ -1,9 +1,12 @@
 /* FastMike - photographers
  * ---------------------------------------------------------------------------
  * Spec sections 17 and 18. Several photographers work the same event from the
- * same laptop. Each one gets his own tab, his own set of photos, and his own
- * printer, so a print started by one of them never comes out of another one's
- * machine.
+ * same laptop. Each one gets his own tab, his own set of photos and his own
+ * folder on the desktop.
+ *
+ * The printers are deliberately NOT owned by a photographer - see printers.js.
+ * Any of them may want either machine at any moment, so every tab gets a button
+ * for every printer.
  *
  * Everything a photographer owns lives on his own record. The application
  * shell reads whichever record is active, which is why switching tabs is
@@ -32,10 +35,6 @@ window.FM = window.FM || {};
       id: newId(),
       name: name,
       colour: colour || COLOURS[people.length % COLOURS.length],
-
-      // his printer, chosen once at the start of the event and remembered
-      printer: '',
-      silent: true,
 
       // his own folder on the desktop - chosen once, then pulled from again
       // and again as new frames land in it
@@ -82,26 +81,10 @@ window.FM = window.FM || {};
     return true;
   }
 
-  function setPrinter(id, printer) {
-    const p = byId(id);
-    if (!p) return false;
-    p.printer = printer || '';
-    changed();
-    return true;
-  }
-
   function setFolder(id, folder) {
     const p = byId(id);
     if (!p) return false;
     p.folder = folder || '';
-    changed();
-    return true;
-  }
-
-  function setSilent(id, silent) {
-    const p = byId(id);
-    if (!p) return false;
-    p.silent = !!silent;
     changed();
     return true;
   }
@@ -129,23 +112,18 @@ window.FM = window.FM || {};
   /**
    * Only the setup is saved, never the photographs. An event can run for hours
    * and the app may be restarted in the middle of it; when it comes back the
-   * photographers and their printers must still be there.
+   * photographers and their folders must still be there.
    */
   function toJSON() {
     return {
       photographers: people.map((p) => ({
-        id: p.id, name: p.name, colour: p.colour,
-        printer: p.printer, silent: p.silent, folder: p.folder
+        id: p.id, name: p.name, colour: p.colour, folder: p.folder
       })),
       activePhotographer: activeId
     };
   }
 
-  /**
-   * Rebuild from saved settings. Accepts the older single-printer format from
-   * before this existed, so an upgrade does not lose the printer the operator
-   * had already set up.
-   */
+  /** Rebuild from saved settings. */
   function load(saved) {
     saved = saved || {};
     people = [];
@@ -155,18 +133,11 @@ window.FM = window.FM || {};
     rows.forEach((r, i) => {
       const p = make(r.name || 'Photographer ' + (i + 1), r.colour);
       if (r.id) p.id = r.id;
-      p.printer = r.printer || '';
-      p.silent = r.silent !== false;
       p.folder = r.folder || '';
       people.push(p);
     });
 
-    if (!people.length) {
-      const p = make('Photographer 1');
-      p.printer = saved.printer || '';                 // older single-printer setup
-      p.silent = saved.silent !== false;
-      people.push(p);
-    }
+    if (!people.length) people.push(make('Photographer 1'));
 
     activeId = byId(saved.activePhotographer) ? saved.activePhotographer : people[0].id;
     changed();
@@ -177,7 +148,7 @@ window.FM = window.FM || {};
 
   FM.people = {
     COLOURS, list, active, byId, setActive, add, rename, remove,
-    setPrinter, setSilent, setFolder, toJSON, load, onChange,
+    setFolder, toJSON, load, onChange,
     get activeId() { return activeId; }
   };
 

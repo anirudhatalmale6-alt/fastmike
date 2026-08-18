@@ -200,6 +200,7 @@ window.FM = window.FM || {};
       photographer: opts.photographer || '',
       colour: opts.colour || '',
       printer: opts.printer || 'system dialog',
+      printerLabel: opts.printerLabel || opts.printer || 'system dialog',
       names: group.items.map((e) => e.name),
       // 152.4 rather than 152.39999999999998 - it is a label, not a measurement
       size: round1(group.wMm) + ' × ' + round1(group.hMm) + ' mm',

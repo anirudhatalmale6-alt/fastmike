@@ -12,17 +12,14 @@
   <div class="tagline">Edit fast. Print fast. Keep working.</div>
 
   <div class="topright">
-    <label class="field">
-      <span id="printerLabel">Printer</span>
-      <select id="printerSelect"><option>Loading&hellip;</option></select>
-    </label>
-    <label class="check" title="Once the printer is set up for the event, jobs go straight to it with no dialog.">
-      <input type="checkbox" id="silentPrint" checked> Print without asking
-    </label>
+    <button id="btnPrinters" class="btn btn-ghost" title="Set up the printers for this event">
+      Printers&hellip;
+    </button>
     <button id="btnSpooler" class="btn btn-ghost" title="Everything sent to the printers">
       Print Queue <span id="queueTag" class="queuetag" hidden></span>
     </button>
-    <button id="btnPrint" class="btn btn-red">Print</button>
+    <!-- one Print button per printer - either machine, from any tab -->
+    <div id="printBar" class="printbar"></div>
   </div>
 </header>
 
@@ -30,7 +27,7 @@
 <nav class="tabbar">
   <div id="tablist" class="tablist"></div>
   <button id="btnAddPerson" class="tab-add" title="Add another photographer">+ Photographer</button>
-  <span class="tabhint">Each photographer keeps his own photos and his own printer</span>
+  <span class="tabhint">Each photographer keeps his own photos and his own folder</span>
 </nav>
 
 <main class="layout">
@@ -122,6 +119,8 @@
       <li><kbd>Enter</kbd><span>add to edited, next photo</span></li>
       <li><kbd>&uarr;</kbd><kbd>&darr;</kbd><span>previous / next photo</span></li>
       <li><kbd>Ctrl</kbd>+<kbd>1</kbd>&hellip;<kbd>9</kbd><span>switch photographer</span></li>
+      <li><kbd>Ctrl</kbd>+<kbd>P</kbd><span id="keyPrint1">print &mdash; first printer</span></li>
+      <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd><span id="keyPrint2">print &mdash; second printer</span></li>
       <li><kbd>F2</kbd><span>speed &amp; graphics info</span></li>
     </ul>
     <div class="copied" id="copiedTag" hidden>Adjustments copied &mdash; Ctrl+V on the next photo</div>
@@ -156,6 +155,7 @@
 <script src="crop.js"></script>
 <script src="photos.js"></script>
 <script src="photographers.js"></script>
+<script src="printers.js"></script>
 <script src="printing.js"></script>
 <script src="app.js"></script>
 </body>
