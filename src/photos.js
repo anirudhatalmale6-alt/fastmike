@@ -100,7 +100,7 @@ window.FM = window.FM || {};
 
   /**
    * Turn import entries into photo records.
-   * entry is {name, path} on the desktop or {name, url} in a browser.
+   * entry is {name, path, group} on the desktop or {name, url} in a browser.
    */
   async function build(entries, nextId) {
     const made = [];
@@ -116,7 +116,9 @@ window.FM = window.FM || {};
           name: entry.name,
           path: entry.path || null,
           url: entry.url || null,
+          group: entry.group || '',      // the subfolder it came out of
           thumb: makeThumb(img, 320, 320),
+          peek: null,                    // filled in the first time it is hovered
           w: d.w,
           h: d.h,
           state: newState()
@@ -154,9 +156,23 @@ window.FM = window.FM || {};
     return parts[parts.length - 1] || dir;
   }
 
+  /**
+   * The last two parts of a path.
+   *
+   * A photographer's folder is normally named after him and sits inside the
+   * folder for the event, so on its own the name says nothing useful - "Georgia"
+   * rather than "Party Royal Hall 18.6 / Georgia".
+   */
+  function folderWhere(dir) {
+    if (!dir) return '';
+    const parts = String(dir).split(/[\\/]/).filter(Boolean);
+    return parts.slice(-2).join(' / ') || dir;
+  }
+
   FM.photos = {
     DESKTOP, NEUTRAL, PREVIEW_MAX, newState, loadImage, makeThumb, dimsOf,
-    previewCopy, openImage, build, pickFiles, pickFolder, readFolder, folderName
+    previewCopy, openImage, build, pickFiles, pickFolder, readFolder,
+    folderName, folderWhere
   };
 
 })(window.FM);

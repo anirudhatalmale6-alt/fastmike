@@ -51,7 +51,7 @@ Everything else is identical.
 |---|---|
 | **Top right** | Printers…, Print Queue, and one **Print** button per printer. |
 | **Left — Actions** | Get New Photos (once a folder is set), Import Photos, Import Folder, Clear Session. Nothing that belongs on a keyboard shortcut. |
-| **Left — Original Photos** | Imported photos as thumbnails. Click to select; the selected one gets a red border. A tick marks photos already sent to Edited. |
+| **Left — Original Photos** | Imported photos as thumbnails, with a button per subfolder above them. Click to select; the selected one gets a red border. A tick marks photos already sent to Edited. Hover one to see it large. |
 | **Centre — Editing Area** | Large preview with the **fixed** 15×20 crop frame. The frame never moves — the photo moves behind it, and everything outside it is hidden, so what you see is exactly what prints. |
 | **Bottom — Edited Photos** | Print-ready versions, five across, two rows. Each has its own print button. |
 | **Right — Adjustments** | Brightness, Highlights, Contrast, Shadows. Each has a slider and its own circular reset icon. |
@@ -164,7 +164,7 @@ every tab can reach every machine.
 - **Clear Session** only clears the photographer whose tab is open. The others keep
   working.
 
-### His own folder
+### His own folder, and the folders inside it
 
 Each photographer shoots into his own folder. **Import Folder** picks it once and the
 tab remembers it; from then on **Get New Photos** reads that folder again with one
@@ -174,6 +174,39 @@ queue of people waiting.
 It only brings in what is not already on the tab, so it can be pressed as often as you
 like as new frames land. If the folder has been moved or unplugged it says so rather
 than quietly importing nothing.
+
+The real setup at a venue is a folder per event, a folder inside it per photographer,
+and inside *that* one folder per shot:
+
+```
+Party Royal Hall 18.6.2026
+    Dimitris
+        D1  D2  D3  D4  D5 ...
+    Georgia
+        G1  G2  G3 ...
+```
+
+So the folder that gets picked usually holds no photographs at all. FastMike reads one
+level down, brings everything in at once, and puts **a button per subfolder above the
+thumbnails** — `All`, `D1`, `D2`, `D3`… with the number in each. Click one and the list
+shows only that shot; the arrow keys then stay inside it rather than wandering into the
+next customer's photos.
+
+Each photographer's tab remembers which one he was looking at, and a subfolder created
+later in the night turns up as a new button the next time **Get New Photos** is pressed —
+without moving him off the one he is working on.
+
+A photographer who just points at a plain folder of photos never sees any of this.
+
+### Hovering a thumbnail
+
+Hold the mouse over a thumbnail in the list and the photograph comes up large beside
+it. A thumbnail is enough to find a photo you already know; it is not enough to decide
+whether the shot is any good.
+
+It does not select the photo, so whatever is set up in the editing area is left alone.
+The large copy is made once per photograph and kept, so the second look is instant, and
+running the mouse down the list loads nothing.
 
 The photographers, their folders and the printers are written to disk, not the
 photographs. If the app is restarted in the middle of an event, the setup is still

@@ -48,6 +48,8 @@
       <h2>Original Photos</h2>
       <span id="origCount" class="count">0</span>
     </div>
+    <!-- D1, D2, D3... the subfolders inside this photographer's folder -->
+    <div id="folderBar" class="folderbar" hidden></div>
     <div id="originals" class="strip"></div>
   </aside>
 
@@ -146,6 +148,12 @@
       <button class="btn" data-close>Close</button>
     </div>
   </div>
+</div>
+
+<!-- hover a thumbnail and the photograph comes up large, without selecting it -->
+<div id="peek" class="peek" hidden>
+  <img id="peekImg" alt="">
+  <div id="peekName" class="peek-name"></div>
 </div>
 
 <div id="toast" class="toast" hidden></div>

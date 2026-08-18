@@ -76,6 +76,48 @@ function listImages(dir) {
     .map((f) => ({ name: f, path: path.join(dir, f) }));
 }
 
+/**
+ * A photographer's folder and the subfolders inside it.
+ *
+ * The setup at a venue is one folder per event, a folder inside it per
+ * photographer, and inside that D1, D2, D3... - one per shot. So the folder that
+ * is picked usually holds no photographs at all, only subfolders. Every image is
+ * returned in one list, each tagged with the subfolder it came from, and the
+ * subfolders are listed separately so the interface can offer them.
+ *
+ * Deliberately one level deep. Walking a whole disk from a folder chosen by
+ * mistake would hang the app at exactly the wrong moment.
+ */
+function listTree(dir) {
+  const files = listImages(dir).map((f) => Object.assign({ group: '' }, f));
+  const groups = files.length ? [{ name: '', count: files.length }] : [];
+
+  let subs = [];
+  try {
+    subs = fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  } catch (_) {
+    subs = [];
+  }
+
+  for (const name of subs) {
+    let inside = [];
+    try {
+      inside = listImages(path.join(dir, name));
+    } catch (_) {
+      continue;                       // unreadable subfolder - skip, do not fail
+    }
+    if (!inside.length) continue;
+    groups.push({ name, count: inside.length });
+    files.push(...inside.map((f) => Object.assign({ group: name }, f)));
+  }
+
+  return { files, groups };
+}
+
 ipcMain.handle('import:files', async () => {
   const res = await dialog.showOpenDialog(win, {
     title: 'Import photos',
@@ -109,7 +151,7 @@ ipcMain.handle('import:folder', async () => {
   });
   if (res.canceled) return null;
   const dir = res.filePaths[0];
-  return { dir, files: listImages(dir) };
+  return Object.assign({ dir }, listTree(dir));
 });
 
 /**
@@ -122,10 +164,10 @@ ipcMain.handle('import:folder', async () => {
  */
 ipcMain.handle('import:folder-at', async (_e, dir) => {
   try {
-    if (!fs.statSync(dir).isDirectory()) return { dir, files: [], missing: true };
-    return { dir, files: listImages(dir) };
+    if (!fs.statSync(dir).isDirectory()) return { dir, files: [], groups: [], missing: true };
+    return Object.assign({ dir }, listTree(dir));
   } catch (_) {
-    return { dir, files: [], missing: true };
+    return { dir, files: [], groups: [], missing: true };
   }
 });
 

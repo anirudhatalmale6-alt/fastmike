@@ -56,6 +56,10 @@
     edited: $('edited'),
     sliders: $('sliders'),
     origCount: $('origCount'),
+    folderBar: $('folderBar'),
+    peek: $('peek'),
+    peekImg: $('peekImg'),
+    peekName: $('peekName'),
     editCount: $('editCount'),
     fileInfo: $('fileInfo'),
     zoom: $('zoom'),
@@ -97,6 +101,7 @@
   /* --------------------------------------------------------------- modal */
 
   function openModal(title, choices) {
+    hidePeek();
     el.modalTitle.textContent = title;
     el.modalBody.innerHTML = '';
     el.modal.querySelector('.sheet').classList.remove('wide-sheet');
@@ -136,6 +141,7 @@
 
   /** Same sheet again, but laid out by the caller rather than as a button list. */
   function openSheet(title, html, wire, wideSheet) {
+    hidePeek();
     el.modalTitle.textContent = title;
     el.modalBody.innerHTML = html;
     el.modal.querySelector('.sheet').classList.toggle('wide-sheet', !!wideSheet);
@@ -267,7 +273,10 @@
     const { made, failed } = await FM.photos.build(entries, () => nextId('p'));
     app.photos.push(...made);
     renderOriginals();
-    if (app.selected < 0 && app.photos.length) selectPhoto(0);
+    if (app.selected < 0) {
+      const vis = visibleIndexes();
+      if (vis.length) selectPhoto(vis[0]);
+    }
     toast(made.length + ' photo' + (made.length === 1 ? '' : 's') + ' imported' +
           (failed ? ' (' + failed + ' skipped)' : ''));
   }
@@ -287,10 +296,15 @@
       if (!DESKTOP) toast('Folder import is available in the desktop build', true);
       return;
     }
-    FM.people.setFolder(FM.people.active().id, picked.dir);
+    const who = FM.people.active();
+    FM.people.setFolder(who.id, picked.dir);
+    who.view = null;                    // a new folder - show all of it first
     syncFolderButton();
     saveSettings();
     await addPhotos(onlyNew(picked.files));
+
+    const subs = (picked.groups || []).filter((g) => g.name).length;
+    if (subs) toast(subs + ' folder' + (subs === 1 ? '' : 's') + ' found - use the buttons above the photos');
   }
 
   /** Everything in the folder that is not already on this photographer's tab. */
@@ -324,7 +338,7 @@
     btn.hidden = !has;
     note.hidden = !has;
     if (has) {
-      note.textContent = who.name + "'s folder: " + FM.photos.folderName(who.folder);
+      note.textContent = who.name + "'s folder: " + FM.photos.folderWhere(who.folder);
       note.title = who.folder;
     }
   }
@@ -392,14 +406,17 @@
     app.preview = null;
     app.imageOf = null;
     app.loadToken++;
+    hidePeek();
 
     renderTabs();
     renderOriginals();
     renderEdited();
     syncFolderButton();
 
-    const i = app.selected;
-    if (i >= 0 && i < app.photos.length) {
+    // he may have been looking at D3 when he left this tab - go back to it
+    const vis = visibleIndexes();
+    const i = vis.indexOf(app.selected) >= 0 ? app.selected : (vis.length ? vis[0] : -1);
+    if (i >= 0) {
       app.selected = -1;              // force selectPhoto to do its work
       selectPhoto(i);
     } else {
@@ -451,8 +468,9 @@
             renderOriginals();
             renderEdited();
             syncFolderButton();
-            if (app.photos.length) {
-              const i = Math.min(app.photos.length - 1, Math.max(0, app.selected));
+            const vis = visibleIndexes();
+            if (vis.length) {
+              const i = vis.indexOf(app.selected) >= 0 ? app.selected : vis[0];
               app.selected = -1;
               selectPhoto(i);
             }
@@ -465,29 +483,142 @@
     ]);
   }
 
+  /* ------------------------------------------------------- folders on the left */
+
+  /**
+   * The subfolders this photographer's photos came out of, in the order they
+   * were read - D1, D2, D3...
+   *
+   * Worked out from the photos themselves rather than kept as separate state,
+   * so pressing Get New Photos halfway through the night cannot leave the two
+   * disagreeing with each other.
+   */
+  function folderGroups() {
+    const order = [];
+    const count = {};
+    app.photos.forEach((p) => {
+      const g = p.group || '';
+      if (!(g in count)) { count[g] = 0; order.push(g); }
+      count[g]++;
+    });
+    return order.map((g) => ({ name: g, count: count[g] }));
+  }
+
+  /** Absolute positions in app.photos of the photos currently on show. */
+  function visibleIndexes() {
+    const view = FM.people.active().view;
+    const out = [];
+    app.photos.forEach((p, i) => {
+      if (view == null || (p.group || '') === view) out.push(i);
+    });
+    return out;
+  }
+
+  /**
+   * One button per subfolder. A photographer who just points at a plain folder
+   * with photos in it never sees this at all - there is nothing to navigate.
+   */
+  function renderFolderBar() {
+    const groups = folderGroups();
+    const view = FM.people.active().view;
+
+    if (groups.length < 2) {
+      el.folderBar.hidden = true;
+      el.folderBar.innerHTML = '';
+      return;
+    }
+
+    // "All" carries its own attribute rather than a reserved name - a subfolder
+    // is free to be called anything at all.
+    const chip = (attr, label, n, on) =>
+      `<button class="fchip${on ? ' on' : ''}" ${attr}
+               title="${escapeHtml(label)} - ${n} photo${n === 1 ? '' : 's'}">${escapeHtml(label)}<span class="fcount">${n}</span></button>`;
+
+    el.folderBar.innerHTML =
+      chip('data-all="1"', 'All', app.photos.length, view == null) +
+      groups.map((g) =>
+        chip('data-folder="' + escapeHtml(g.name) + '"',
+             g.name || 'Loose', g.count, view === g.name)).join('');
+
+    el.folderBar.hidden = false;
+    el.folderBar.querySelectorAll('.fchip').forEach((n) => {
+      n.addEventListener('click', () =>
+        switchFolder(n.hasAttribute('data-all') ? null : n.dataset.folder));
+    });
+  }
+
+  function switchFolder(name) {
+    const who = FM.people.active();
+    if (who.view === name) return;
+    who.view = name;
+    hidePeek();
+    renderFolderBar();
+    renderOriginals();
+
+    // land on something in the folder just opened rather than leaving the
+    // editing area showing a photo from the previous one
+    const vis = visibleIndexes();
+    if (vis.length && vis.indexOf(app.selected) < 0) selectPhoto(vis[0]);
+  }
+
   /* ---------------------------------------------------------- originals UI */
 
   function renderOriginals() {
     el.origCount.textContent = app.photos.length;
+    renderFolderBar();
 
     if (!app.photos.length) {
       el.originals.innerHTML = '<div class="empty"><p>No photos yet</p></div>';
       return;
     }
 
+    const vis = visibleIndexes();
+    if (!vis.length) {
+      el.originals.innerHTML = '<div class="empty"><p>Nothing in this folder</p></div>';
+      return;
+    }
+
     const done = new Set(app.edited.map((e) => e.srcId));
-    el.originals.innerHTML = app.photos.map((p, i) => `
+    el.originals.innerHTML = vis.map((i, at) => {
+      const p = app.photos[i];
+      return `
       <div class="thumb${i === app.selected ? ' selected' : ''}${done.has(p.id) ? ' edited-done' : ''}"
-           data-i="${i}" title="${p.name}">
+           data-i="${i}" title="${escapeHtml(p.name)}">
         <img src="${p.thumb}" alt="">
-        <span class="no">${i + 1}</span>
+        <span class="no">${at + 1}</span>
         <span class="done">&#10003;</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     el.originals.querySelectorAll('.thumb').forEach((n) => {
-      n.addEventListener('click', () => selectPhoto(+n.dataset.i));
+      const i = +n.dataset.i;
+      n.addEventListener('click', () => { hidePeek(); selectPhoto(i); });
+      n.addEventListener('mouseenter', (e) => peekLater(i, e.clientY));
+      n.addEventListener('mousemove', (e) => { if (peekOf === i) placePeek(e.clientY); });
+      n.addEventListener('mouseleave', hidePeek);
     });
   }
+
+  /**
+   * The list scrolling under a stationary mouse means a different photograph is
+   * now beneath it. Re-aiming beats hiding: he wheels down the strip with the
+   * pointer resting on it and the preview keeps up instead of going blank.
+   */
+  let lastPointer = { x: 0, y: 0 };
+  el.originals.addEventListener('mousemove', (e) => {
+    lastPointer = { x: e.clientX, y: e.clientY };
+  });
+
+  el.originals.addEventListener('scroll', () => {
+    const under = document.elementFromPoint(lastPointer.x, lastPointer.y);
+    const thumb = under && under.closest ? under.closest('.thumb') : null;
+    if (!thumb) return hidePeek();
+
+    const i = +thumb.dataset.i;
+    if (i === peekOf) return placePeek(lastPointer.y);
+    hidePeek();
+    peekLater(i, lastPointer.y);
+  });
 
   function markSelection() {
     el.originals.querySelectorAll('.thumb').forEach((n) => {
@@ -495,6 +626,71 @@
     });
     const node = el.originals.querySelector('.thumb.selected');
     if (node) node.scrollIntoView({ block: 'nearest' });
+  }
+
+  /* ------------------------------------------------------------ hover peek */
+
+  /**
+   * Hovering a thumbnail brings the photograph up large next to the list.
+   *
+   * A thumbnail is 320 pixels - enough to find a photo you already know, not
+   * enough to decide whether the shot is any good. This answers that without
+   * selecting the photo and losing the crop that is already set up on screen.
+   *
+   * The large copy is made once per photograph and kept on its record. The
+   * thumbnail goes up immediately so the window never appears empty, and is
+   * replaced the moment the real one is ready.
+   */
+  const PEEK_MAX = 720;        // long edge of the large copy
+  const PEEK_DELAY = 160;      // ms - running the mouse down the list must not load anything
+
+  let peekTimer = null;
+  let peekToken = 0;
+  let peekOf = -1;
+
+  function peekLater(i, y) {
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(() => showPeek(i, y), PEEK_DELAY);
+  }
+
+  function hidePeek() {
+    clearTimeout(peekTimer);
+    peekToken++;
+    peekOf = -1;
+    el.peek.hidden = true;
+  }
+
+  async function showPeek(i, y) {
+    const p = app.photos[i];
+    // a sheet is open, or the photo went away while the timer was running
+    if (!p || !el.modal.hidden || !el.spooler.hidden) return;
+
+    peekOf = i;
+    el.peekImg.src = p.peek || p.thumb;
+    el.peekName.textContent = p.name + '  ·  ' + p.w + ' × ' + p.h;
+    el.peek.hidden = false;
+    placePeek(y);
+
+    if (p.peek) return;
+
+    const token = ++peekToken;
+    try {
+      const img = await FM.photos.openImage(p);
+      if (token !== peekToken) return;          // the mouse has moved on
+      p.peek = FM.photos.makeThumb(img, PEEK_MAX, PEEK_MAX);
+      if (peekOf === i) { el.peekImg.src = p.peek; placePeek(y); }
+    } catch (_) {
+      // the thumbnail is already showing - nothing useful to say here
+    }
+  }
+
+  /** Beside the list, level with the mouse, never off the top or bottom. */
+  function placePeek(y) {
+    const strip = el.originals.getBoundingClientRect();
+    const box = el.peek.getBoundingClientRect();
+    const top = Math.max(8, Math.min(window.innerHeight - box.height - 8, y - box.height / 2));
+    el.peek.style.left = Math.round(strip.right + 10) + 'px';
+    el.peek.style.top = Math.round(top) + 'px';
   }
 
   async function selectPhoto(i) {
@@ -523,10 +719,13 @@
     }
   }
 
+  /** Next / previous within the folder on show, not across the whole tab. */
   function step(delta) {
-    if (!app.photos.length) return;
-    const i = Math.min(app.photos.length - 1, Math.max(0, app.selected + delta));
-    if (i !== app.selected) selectPhoto(i);
+    const vis = visibleIndexes();
+    if (!vis.length) return;
+    const at = vis.indexOf(app.selected);
+    const to = at < 0 ? 0 : Math.min(vis.length - 1, Math.max(0, at + delta));
+    if (vis[to] !== app.selected) selectPhoto(vis[to]);
   }
 
   /* ------------------------------------------------------------- sliders */
@@ -761,7 +960,7 @@
     toast('Added to edited');
 
     // straight on to the next photo - this is the whole point of the app
-    if (app.selected < app.photos.length - 1) step(1);
+    step(1);
   }
 
   const PRINT_SVG =
@@ -836,6 +1035,8 @@
           app.image = null;
           app.preview = null;
           app.imageOf = null;
+          FM.people.active().view = null;
+          hidePeek();
           renderOriginals();
           el.fileInfo.textContent = '—';
           syncSliders();
@@ -1278,6 +1479,8 @@
     people: FM.people, printers: FM.printers,
     switchTo, renderTabs, renderSpooler, openSpooler,
     importFolder, importAgain, onlyNew, syncFolderButton,
+    folderGroups, visibleIndexes, switchFolder, renderFolderBar,
+    showPeek, hidePeek, peekOf: () => peekOf,
     renderPrintBar, openPrinterSetup, askCopies, saveSettings, loadPrinters,
     printerList: () => printerList,
     setPrinterList: (l) => { printerList = l; },
