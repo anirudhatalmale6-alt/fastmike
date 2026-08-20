@@ -76,45 +76,63 @@ function listImages(dir) {
     .map((f) => ({ name: f, path: path.join(dir, f) }));
 }
 
+/** The folders directly inside dir, in the order a file browser would show them. */
+function subFolders(dir) {
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name[0] !== '.')
+      .map((d) => d.name)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  } catch (_) {
+    return [];                        // unreadable - no folders, not a failure
+  }
+}
+
 /**
- * A photographer's folder and the subfolders inside it.
+ * A photographer's folder and the folders inside it.
  *
  * The setup at a venue is one folder per event, a folder inside it per
  * photographer, and inside that D1, D2, D3... - one per shot. So the folder that
  * is picked usually holds no photographs at all, only subfolders. Every image is
- * returned in one list, each tagged with the subfolder it came from, and the
- * subfolders are listed separately so the interface can offer them.
+ * returned in one list, each tagged with the folder it came from - "D2", or
+ * "Dimitris/D2" if he pointed at the whole event - and the folders are listed
+ * separately so the interface can draw them as a tree.
  *
- * Deliberately one level deep. Walking a whole disk from a folder chosen by
- * mistake would hang the app at exactly the wrong moment.
+ * Two levels deep and no further, and it gives up after MAX_DIRS folders.
+ * Walking a whole disk from a folder chosen by mistake would hang the app at
+ * exactly the wrong moment of the night.
  */
+const MAX_DEPTH = 2;
+const MAX_DIRS = 300;
+
 function listTree(dir) {
-  const files = listImages(dir).map((f) => Object.assign({ group: '' }, f));
-  const groups = files.length ? [{ name: '', count: files.length }] : [];
+  const files = [];
+  const groups = [];
+  let seen = 0;
 
-  let subs = [];
-  try {
-    subs = fs
-      .readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  } catch (_) {
-    subs = [];
-  }
-
-  for (const name of subs) {
+  const walk = (at, rel, depth) => {
     let inside = [];
     try {
-      inside = listImages(path.join(dir, name));
+      inside = listImages(at);
     } catch (_) {
-      continue;                       // unreadable subfolder - skip, do not fail
+      return;                         // unreadable folder - skip, do not fail
     }
-    if (!inside.length) continue;
-    groups.push({ name, count: inside.length });
-    files.push(...inside.map((f) => Object.assign({ group: name }, f)));
-  }
+    if (inside.length || rel === '') {
+      groups.push({ name: rel, count: inside.length });
+      files.push(...inside.map((f) => Object.assign({ group: rel }, f)));
+    }
+    if (depth >= MAX_DEPTH) return;
+    for (const name of subFolders(at)) {
+      if (++seen > MAX_DIRS) return;
+      walk(path.join(at, name), rel ? rel + '/' + name : name, depth + 1);
+    }
+  };
 
+  walk(dir, '', 0);
+
+  // the folder itself only earns a row of its own when it holds photographs
+  if (groups.length && groups[0].name === '' && !groups[0].count) groups.shift();
   return { files, groups };
 }
 

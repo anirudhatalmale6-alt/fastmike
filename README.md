@@ -51,7 +51,7 @@ Everything else is identical.
 |---|---|
 | **Top right** | Printers…, Print Queue, and one **Print** button per printer. |
 | **Left — Actions** | Get New Photos (once a folder is set), Import Photos, Import Folder, Clear Session. Nothing that belongs on a keyboard shortcut. |
-| **Left — Original Photos** | Imported photos as thumbnails, with a button per subfolder above them. Click to select; the selected one gets a red border. A tick marks photos already sent to Edited. Hover one to see it large. |
+| **Left — Original Photos** | Imported photos as thumbnails, with a folder tree above them. Click to select; the selected one gets a red border. A tick marks photos already sent to Edited. Hover one to see it large. |
 | **Centre — Editing Area** | Large preview with the **fixed** 15×20 crop frame. The frame never moves — the photo moves behind it, and everything outside it is hidden, so what you see is exactly what prints. |
 | **Bottom — Edited Photos** | Print-ready versions, five across, two rows. Each has its own print button. |
 | **Right — Adjustments** | Brightness, Highlights, Contrast, Shadows. Each has a slider and its own circular reset icon. |
@@ -186,15 +186,29 @@ Party Royal Hall 18.6.2026
         G1  G2  G3 ...
 ```
 
-So the folder that gets picked usually holds no photographs at all. FastMike reads one
-level down, brings everything in at once, and puts **a button per subfolder above the
-thumbnails** — `All`, `D1`, `D2`, `D3`… with the number in each. Click one and the list
-shows only that shot; the arrow keys then stay inside it rather than wandering into the
-next customer's photos.
+So the folder that gets picked usually holds no photographs at all. FastMike reads two
+levels down, brings everything in at once, and draws **a folder tree above the
+thumbnails**, the way a file browser draws one:
 
-Each photographer's tab remembers which one he was looking at, and a subfolder created
-later in the night turns up as a new button the next time **Get New Photos** is pressed —
-without moving him off the one he is working on.
+```
+▾ 📁 Dimitris   30
+    📁 D1        6
+    📁 D2        6
+    📁 D3        6
+```
+
+Click a folder and the list below shows only that shot; the arrow keys then stay inside
+it rather than wandering into the next customer's photos. Click the folder at the top and
+the whole night comes back. Clicking a folder that has folders inside it shows everything
+underneath it, and the little arrow folds it away without changing what is on show.
+
+Because it reads two levels, pointing a tab at the *event* folder works too — the tree
+then has the photographers in it, each with his own shots underneath.
+
+Each photographer's tab remembers which folder he was looking at, and a folder created
+later in the night turns up in the tree the next time **Get New Photos** is pressed —
+without moving him off the one he is working on. Photographs sitting loose in the folder
+itself get a **Loose photos** row of their own.
 
 A photographer who just points at a plain folder of photos never sees any of this.
 

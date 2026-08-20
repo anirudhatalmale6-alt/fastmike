@@ -118,42 +118,61 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ------------------------------------------- subfolders D1, D2, D3 ... */
 
-.folderbar {
+/* --------------------------------- the folder tree, above his photos */
+
+.ftree {
   flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 8px 10px;
-  max-height: 124px;              /* a long night can leave a lot of them */
+  padding: 4px 6px;
+  max-height: 34vh;               /* a long night can leave a lot of them */
   overflow-y: auto;
   border-bottom: 1px solid var(--line);
   background: var(--bg-raise);
 }
-.folderbar[hidden] { display: none; }
-.fchip {
+.ftree[hidden] { display: none; }
+.frow {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 6px;
+  padding-right: 6px;
+  height: 24px;
+  font-size: 12px;
   color: var(--text-dim);
-  background: var(--bg-input);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 3px;
   cursor: pointer;
+  user-select: none;
 }
-.fchip:hover { color: var(--text); border-color: #4a4a4a; }
-.fchip.on {
-  color: #1a1207;
-  background: var(--accent);
-  border-color: var(--accent);
+.frow:hover { background: #2c2c2c; color: var(--text); }
+.frow.on {
+  background: #33404f;
+  color: #fff;
+}
+.ftwist {
+  flex: 0 0 auto;
+  width: 13px;
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.ftwist:not(.blank):not(.fixed):hover { opacity: 1; }
+.ftwist.fixed { opacity: 0.4; }
+.fico {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  fill: #e3b23c;                  /* the folder yellow a file browser uses */
+}
+.frow.on .fico { fill: #ffd166; }
+.fname {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .fcount {
+  flex: 0 0 auto;
   font-size: 10px;
   font-weight: 700;
-  opacity: 0.75;
+  opacity: 0.6;
 }
 
 /* --------------------------------- hover a thumbnail, see the photograph */

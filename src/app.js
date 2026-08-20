@@ -56,7 +56,7 @@
     edited: $('edited'),
     sliders: $('sliders'),
     origCount: $('origCount'),
-    folderBar: $('folderBar'),
+    folderTree: $('folderTree'),
     peek: $('peek'),
     peekImg: $('peekImg'),
     peekName: $('peekName'),
@@ -304,7 +304,11 @@
     await addPhotos(onlyNew(picked.files));
 
     const subs = (picked.groups || []).filter((g) => g.name).length;
-    if (subs) toast(subs + ' folder' + (subs === 1 ? '' : 's') + ' found - use the buttons above the photos');
+    if (subs) {
+      openAllBranches();              // a folder just picked shows what is in it
+      renderFolderTree();
+      toast(subs + ' folder' + (subs === 1 ? '' : 's') + ' found - they are listed above the photos');
+    }
   }
 
   /** Everything in the folder that is not already on this photographer's tab. */
@@ -504,47 +508,170 @@
     return order.map((g) => ({ name: g, count: count[g] }));
   }
 
+  /** Is this photo inside the folder on show, or inside one of its subfolders? */
+  function inView(photo, view) {
+    if (view == null) return true;
+    const g = photo.group || '';
+    return g === view || (view !== '' && g.indexOf(view + '/') === 0);
+  }
+
   /** Absolute positions in app.photos of the photos currently on show. */
   function visibleIndexes() {
     const view = FM.people.active().view;
     const out = [];
-    app.photos.forEach((p, i) => {
-      if (view == null || (p.group || '') === view) out.push(i);
-    });
+    app.photos.forEach((p, i) => { if (inView(p, view)) out.push(i); });
     return out;
   }
 
   /**
-   * One button per subfolder. A photographer who just points at a plain folder
-   * with photos in it never sees this at all - there is nothing to navigate.
+   * The tree of folders his photos came out of.
+   *
+   * Built from the paths themselves, so a folder that holds nothing but other
+   * folders - "Dimitris", with D1..D5 inside it - still gets a branch of its own
+   * to open and close, exactly as it looks in a file browser.
    */
-  function renderFolderBar() {
-    const groups = folderGroups();
-    const view = FM.people.active().view;
+  function folderTree() {
+    const byPath = {};
+    const roots = [];
 
-    if (groups.length < 2) {
-      el.folderBar.hidden = true;
-      el.folderBar.innerHTML = '';
+    const node = (path) => {
+      if (byPath[path]) return byPath[path];
+      const cut = path.lastIndexOf('/');
+      const n = byPath[path] = {
+        path,
+        label: cut < 0 ? path : path.slice(cut + 1),
+        count: 0,                    // photos in it, and in everything under it
+        kids: []
+      };
+      if (cut < 0) roots.push(n);
+      else node(path.slice(0, cut)).kids.push(n);
+      return n;
+    };
+
+    folderGroups().forEach((g) => {
+      if (!g.name) return;           // loose photos belong to the folder itself
+      node(g.name);
+    });
+
+    // counts run upwards - a folder shows everything beneath it, like Explorer
+    app.photos.forEach((p) => {
+      let at = p.group || '';
+      while (at) {
+        if (byPath[at]) byPath[at].count++;
+        const cut = at.lastIndexOf('/');
+        at = cut < 0 ? '' : at.slice(0, cut);
+      }
+    });
+    return roots;
+  }
+
+  /**
+   * The folder tree down the left, above the photos.
+   *
+   * A photographer who just points at a plain folder full of photos never sees
+   * this at all - there is nothing to navigate.
+   */
+  function renderFolderTree() {
+    const who = FM.people.active();
+    const roots = folderTree();
+
+    if (!roots.length) {
+      el.folderTree.hidden = true;
+      el.folderTree.innerHTML = '';
       return;
     }
+    if (!who.closed) who.closed = new Set();
 
-    // "All" carries its own attribute rather than a reserved name - a subfolder
-    // is free to be called anything at all.
-    const chip = (attr, label, n, on) =>
-      `<button class="fchip${on ? ' on' : ''}" ${attr}
-               title="${escapeHtml(label)} - ${n} photo${n === 1 ? '' : 's'}">${escapeHtml(label)}<span class="fcount">${n}</span></button>`;
+    const loose = app.photos.filter((p) => !p.group).length;
+    const rows = [];
 
-    el.folderBar.innerHTML =
-      chip('data-all="1"', 'All', app.photos.length, view == null) +
-      groups.map((g) =>
-        chip('data-folder="' + escapeHtml(g.name) + '"',
-             g.name || 'Loose', g.count, view === g.name)).join('');
+    // The folder he picked, at the top - clicking it shows the whole night.
+    // It carries its own attribute rather than a reserved path, so a folder of
+    // his is free to be named anything at all.
+    rows.push(row({
+      attr: 'data-all="1"',
+      label: FM.photos.folderName(who.folder) || 'All photos',
+      count: app.photos.length,
+      depth: 0,
+      on: who.view == null,
+      fixed: true                     // the top of the tree does not fold away
+    }));
+    if (loose) {
+      rows.push(row({
+        attr: 'data-folder=""',
+        label: 'Loose photos',
+        count: loose,
+        depth: 1,
+        on: who.view === '',
+        openable: false
+      }));
+    }
 
-    el.folderBar.hidden = false;
-    el.folderBar.querySelectorAll('.fchip').forEach((n) => {
+    const walk = (nodes, depth) => {
+      nodes.forEach((n) => {
+        const open = !who.closed.has(n.path);
+        rows.push(row({
+          attr: 'data-folder="' + escapeHtml(n.path) + '"',
+          label: n.label,
+          count: n.count,
+          depth,
+          on: who.view === n.path,
+          openable: n.kids.length > 0,
+          open
+        }));
+        if (n.kids.length && open) walk(n.kids, depth + 1);
+      });
+    };
+    walk(roots, 1);
+
+    el.folderTree.innerHTML = rows.join('');
+    el.folderTree.hidden = false;
+
+    el.folderTree.querySelectorAll('.frow').forEach((n) => {
       n.addEventListener('click', () =>
         switchFolder(n.hasAttribute('data-all') ? null : n.dataset.folder));
     });
+    el.folderTree.querySelectorAll('.ftwist:not(.blank):not(.fixed)').forEach((n) => {
+      n.addEventListener('click', (e) => {
+        e.stopPropagation();          // opening a branch is not choosing it
+        toggleBranch(n.parentElement.dataset.folder);
+      });
+    });
+  }
+
+  const FOLDER_ICON =
+    '<svg class="fico" viewBox="0 0 16 16" aria-hidden="true">' +
+    '<path d="M1.5 3.2h4.1l1.3 1.6h7.6c.4 0 .7.3.7.7v7.3c0 .4-.3.7-.7.7H1.5a.7.7 0 0 1-.7-.7V3.9c0-.4.3-.7.7-.7z"/></svg>';
+
+  function row(o) {
+    const twist = o.fixed
+      ? '<span class="ftwist fixed">&#9662;</span>'
+      : o.openable
+        ? '<span class="ftwist" title="' + (o.open ? 'Close' : 'Open') + '">' +
+          (o.open ? '&#9662;' : '&#9656;') + '</span>'
+        : '<span class="ftwist blank"></span>';
+    return (
+      '<div class="frow' + (o.on ? ' on' : '') + '" ' + o.attr +
+      ' style="padding-left:' + (4 + o.depth * 14) + 'px"' +
+      ' title="' + escapeHtml(o.label) + ' - ' + o.count +
+      ' photo' + (o.count === 1 ? '' : 's') + '">' +
+      twist + FOLDER_ICON +
+      '<span class="fname">' + escapeHtml(o.label) + '</span>' +
+      '<span class="fcount">' + o.count + '</span></div>'
+    );
+  }
+
+  function toggleBranch(path) {
+    const who = FM.people.active();
+    if (!who.closed) who.closed = new Set();
+    if (who.closed.has(path)) who.closed.delete(path);
+    else who.closed.add(path);
+    renderFolderTree();
+  }
+
+  /** Open every branch again - a folder just picked shows all of what is in it. */
+  function openAllBranches() {
+    FM.people.active().closed = new Set();
   }
 
   function switchFolder(name) {
@@ -552,7 +679,7 @@
     if (who.view === name) return;
     who.view = name;
     hidePeek();
-    renderFolderBar();
+    renderFolderTree();
     renderOriginals();
 
     // land on something in the folder just opened rather than leaving the
@@ -565,7 +692,7 @@
 
   function renderOriginals() {
     el.origCount.textContent = app.photos.length;
-    renderFolderBar();
+    renderFolderTree();
 
     if (!app.photos.length) {
       el.originals.innerHTML = '<div class="empty"><p>No photos yet</p></div>';
@@ -1479,7 +1606,8 @@
     people: FM.people, printers: FM.printers,
     switchTo, renderTabs, renderSpooler, openSpooler,
     importFolder, importAgain, onlyNew, syncFolderButton,
-    folderGroups, visibleIndexes, switchFolder, renderFolderBar,
+    folderGroups, folderTree, visibleIndexes, switchFolder, renderFolderTree,
+    toggleBranch, openAllBranches,
     showPeek, hidePeek, peekOf: () => peekOf,
     renderPrintBar, openPrinterSetup, askCopies, saveSettings, loadPrinters,
     printerList: () => printerList,

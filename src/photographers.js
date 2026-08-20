@@ -40,9 +40,13 @@ window.FM = window.FM || {};
       // and again as new frames land in it
       folder: '',
 
-      // which subfolder of his folder he is looking at - null is all of them.
-      // Belongs to him, so moving between tabs does not lose his place.
+      // which folder of his he is looking at - null is all of them. Belongs to
+      // him, so moving between tabs does not lose his place.
       view: null,
+
+      // the branches he has closed in the tree on the left. Closed rather than
+      // open, so a folder that lands mid-event shows up on its own.
+      closed: new Set(),
 
       // his working set - the shell reads these through app.photos etc
       photos: [],
