@@ -137,11 +137,16 @@ function listTree(dir) {
 }
 
 ipcMain.handle('import:files', async () => {
-  const res = await dialog.showOpenDialog(win, {
-    title: 'Import photos',
-    properties: ['openFile', 'multiSelections'],
-    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'tif', 'tiff'] }]
-  });
+  let res;
+  try {
+    res = await dialog.showOpenDialog(win, {
+      title: 'Import photos',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'tif', 'tiff'] }]
+    });
+  } catch (err) {
+    return { error: 'Could not open the file chooser: ' + err.message };
+  }
   if (res.canceled) return [];
   return res.filePaths.map((p) => ({ name: path.basename(p), path: p }));
 });
@@ -162,14 +167,30 @@ ipcMain.handle('image:bytes', async (_e, p) => {
   };
 });
 
+/**
+ * Nothing here may fail silently. "I press Import Folder and nothing happens" is
+ * impossible to work on from a distance, so anything that goes wrong comes back
+ * as a message the operator can read out.
+ */
 ipcMain.handle('import:folder', async () => {
-  const res = await dialog.showOpenDialog(win, {
-    title: 'Import folder',
-    properties: ['openDirectory']
-  });
+  let res;
+  try {
+    res = await dialog.showOpenDialog(win, {
+      title: 'Import folder',
+      properties: ['openDirectory']
+    });
+  } catch (err) {
+    return { dir: '', files: [], groups: [], error: 'Could not open the folder chooser: ' + err.message };
+  }
   if (res.canceled) return null;
+
   const dir = res.filePaths[0];
-  return Object.assign({ dir }, listTree(dir));
+  if (!dir) return null;
+  try {
+    return Object.assign({ dir }, listTree(dir));
+  } catch (err) {
+    return { dir, files: [], groups: [], error: 'Could not read ' + dir + ': ' + err.message };
+  }
 });
 
 /**

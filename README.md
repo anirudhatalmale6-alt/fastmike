@@ -83,9 +83,9 @@ set each one:
 | Held key | Wheel over the photo |
 |---|---|
 | Ctrl | Brightness |
-| Alt | Highlights |
+| Alt | Shadows |
 | Shift | Contrast |
-| Ctrl + Alt | Shadows |
+| Ctrl + Alt | Highlights |
 
 While a key is held the wheel *only* adjusts — it never zooms at the same time.
 The pairing lives in one place in the code (`WHEEL_KEYS` in `src/app.js`); moving
@@ -345,3 +345,26 @@ laptop* above.
 Nothing else in the specification is outstanding. What is deliberately left out:
 photographs themselves are never written to the settings file, and there is no
 cross-photographer view — each tab is its own workspace, which is the point.
+
+---
+
+## Windows 7
+
+Electron dropped Windows 7 support at version 23, so the normal build simply will
+not start on it. There is a separate **Windows 7 build** compiled against Electron
+22.3.27 (Chromium 108), the last version that still runs there:
+
+```
+FastMike-<version>-win7-portable.exe
+FastMike-<version>-win7-setup.exe
+```
+
+Identical source, older engine underneath. It is built from `../fastmike-win7`,
+which carries the same `main.js`, `preload.js` and `src/` and differs only in its
+`devDependencies` and artifact names.
+
+Playwright cannot attach to Chromium 108 — `connect_over_cdp` calls
+`Browser.setDownloadBehavior`, which 108 does not implement — so that build is
+tested through a small raw-CDP driver instead (`cdp.py` / `test_win7.py`).
+
+On Windows 10 and 11, use the normal build: it is a newer engine and faster.

@@ -282,7 +282,13 @@
   }
 
   async function importFiles() {
-    const picked = await FM.photos.pickFiles(el.webPicker);
+    let picked;
+    try {
+      picked = await FM.photos.pickFiles(el.webPicker);
+    } catch (err) {
+      return toast('Import Photos failed: ' + err.message, true);
+    }
+    if (picked && picked.error) return toast(picked.error, true);
     if (picked) await addPhotos(picked);
   }
 
@@ -291,16 +297,30 @@
    * from then on new frames come in with one click and no file browser.
    */
   async function importFolder() {
-    const picked = await FM.photos.pickFolder();
+    let picked;
+    try {
+      picked = await FM.photos.pickFolder();
+    } catch (err) {
+      // never leave the button looking dead - say what went wrong
+      return toast('Import Folder failed: ' + err.message, true);
+    }
     if (!picked) {
       if (!DESKTOP) toast('Folder import is available in the desktop build', true);
-      return;
+      return;                           // on the desktop this is simply Cancel
     }
+    if (picked.error) return toast(picked.error, true);
+
     const who = FM.people.active();
     FM.people.setFolder(who.id, picked.dir);
     who.view = null;                    // a new folder - show all of it first
     syncFolderButton();
     saveSettings();
+
+    if (!picked.files.length) {
+      renderOriginals();
+      return toast('There are no photos in ' + FM.photos.folderName(picked.dir) +
+                   ' or in the folders inside it', true);
+    }
     await addPhotos(onlyNew(picked.files));
 
     const subs = (picked.groups || []).filter((g) => g.name).length;
@@ -989,9 +1009,9 @@
    * wheel - see WHEEL_KEYS, which is the one place the pairing is decided.
    */
   const WHEEL_KEYS = [
-    { ctrl: true,  alt: true,  shift: false, key: 'shadows'    },  // Ctrl+Alt
+    { ctrl: true,  alt: true,  shift: false, key: 'highlights' },  // Ctrl+Alt
     { ctrl: true,  alt: false, shift: false, key: 'brightness' },  // Ctrl
-    { ctrl: false, alt: true,  shift: false, key: 'highlights' },  // Alt
+    { ctrl: false, alt: true,  shift: false, key: 'shadows'    },  // Alt
     { ctrl: false, alt: false, shift: true,  key: 'contrast'   }   // Shift
   ];
 
