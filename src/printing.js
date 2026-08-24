@@ -135,7 +135,9 @@ window.FM = window.FM || {};
       widthMm: group.wMm,
       heightMm: group.hMm,
       printer: opts.printer || null,
-      silent: !!opts.silent && !!opts.printer
+      silent: !!opts.silent && !!opts.printer,
+      // false hands the page size back to the driver - see print:images
+      pageSize: opts.pageSize !== false
     });
   }
 

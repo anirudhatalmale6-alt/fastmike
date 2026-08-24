@@ -1273,18 +1273,73 @@
    * out in the background. The job carries the photographer it came from, so
    * the print queue can still say who sent it.
    */
-  function doPrint(entries, what, printerName) {
+  /* Printers he has been warned about and waved through. Session only - the
+   * next time the app starts he gets asked again, because by then the driver
+   * may well have been put right. */
+  const paperWaved = new Set();
+
+  function sendPrint(entries, what, printerName) {
     const who = FM.people.active();
     const res = FM.printing.send(entries, {
       printer: printerName || '',
       silent: printerName ? FM.printers.silentFor(printerName) : false,
       printerLabel: FM.printers.labelFor(printerName),
+      pageSize: printerName ? FM.printers.sendsPageSize(printerName) : true,
       photographer: who.name,
       colour: who.colour
     });
     toast('Queued ' + what + ' for ' + who.name +
           (printerName ? ' on ' + FM.printers.labelFor(printerName) : '') +
           (res.queued ? ' (' + res.queued + ' pages)' : ''));
+  }
+
+  /**
+   * Stop before the paper is wasted.
+   *
+   * The driver decides where a 6 inch roll gets cut. Set to 6x4 it shrinks the
+   * 6x8 page the app renders and pads the long sides with white - a ruined
+   * print, and a ruined print costs media. So if the driver says it is on
+   * anything but 6x8 he is told once, with the four clicks that fix it, and
+   * he can still print anyway if he means to.
+   */
+  function doPrint(entries, what, printerName) {
+    const bad = printerName && !paperWaved.has(printerName)
+      ? FM.printers.wrongPaper(printerName)
+      : null;
+    if (!bad) return sendPrint(entries, what, printerName);
+
+    openSheet('The printer is set to ' + FM.printers.paperLabel(bad),
+      '<p class="warn-lead">' + escapeHtml(FM.printers.labelFor(printerName)) +
+      ' is set to <b>' + escapeHtml(FM.printers.paperLabel(bad)) + '</b>' +
+      (bad.name ? ' (' + escapeHtml(bad.name) + ')' : '') +
+      ', but every photo here is 6 × 8 in.</p>' +
+      '<p class="hint">It will print small, with white down the two long sides. ' +
+      'Four clicks in Windows fixes it for good:</p>' +
+      '<ol class="steps">' +
+      '<li>Start, then <b>Devices and Printers</b></li>' +
+      '<li>Right-click <b>' + escapeHtml(printerName) + '</b>, then <b>Printing preferences</b></li>' +
+      '<li>Set <b>Paper Size</b> to <b>6 × 8</b>, and Border to <b>Borderless</b> if it is offered</li>' +
+      '<li>Come back here and press <b>Check again</b></li>' +
+      '</ol>' +
+      '<div class="sheet-actions">' +
+      '<button class="btn" id="paperRecheck">Check again</button>' +
+      '<button class="btn btn-ghost" id="paperAnyway">Print anyway</button>' +
+      '</div>',
+      (body) => {
+        body.querySelector('#paperRecheck').addEventListener('click', async () => {
+          const btn = body.querySelector('#paperRecheck');
+          btn.disabled = true;
+          btn.textContent = 'Checking…';
+          await refreshPaper(printerName);
+          closeModal();
+          doPrint(entries, what, printerName);
+        });
+        body.querySelector('#paperAnyway').addEventListener('click', () => {
+          paperWaved.add(printerName);
+          closeModal();
+          sendPrint(entries, what, printerName);
+        });
+      });
   }
 
   /* ------------------------------------------------------------- print bar */
@@ -1298,9 +1353,17 @@
     const printers = FM.printers.list();
 
     el.printBar.innerHTML = printers.length
-      ? printers.map((p) => `
-          <button class="btn btn-red" data-print-to="${escapeHtml(p.name)}"
-                  title="Send the edited photos to ${escapeHtml(p.name)}">Print ${escapeHtml(p.label)}</button>`).join('')
+      ? printers.map((p) => {
+          const bad = FM.printers.wrongPaper(p.name);
+          const tip = bad
+            ? p.name + ' is set to ' + FM.printers.paperLabel(bad) + ' - the photos are 6 × 8 in'
+            : 'Send the edited photos to ' + p.name;
+          return `
+          <button class="btn btn-red${bad ? ' paper-bad' : ''}" data-print-to="${escapeHtml(p.name)}"
+                  title="${escapeHtml(tip)}">Print ${escapeHtml(p.label)}${
+            bad ? '<span class="paper-flag">' + escapeHtml(FM.printers.paperLabel(bad)) + '</span>' : ''
+          }</button>`;
+        }).join('')
       : '<button class="btn btn-red" data-print-to="">Print</button>';
 
     el.printBar.querySelectorAll('[data-print-to]').forEach((b) => {
@@ -1403,6 +1466,31 @@
 
   let printerList = [];           // everything Windows knows about
 
+  /**
+   * Ask one printer what paper it is set to.
+   *
+   * Never throws and never blocks anything: a driver that will not answer just
+   * leaves the paper unknown, and unknown never stops a print. Reading it costs
+   * a moment, so it happens when the app starts and when he asks - not on the
+   * way to the printer with a queue of people waiting.
+   */
+  async function refreshPaper(name) {
+    if (!DESKTOP || !window.fastmike.printerPaper) return null;
+    let info;
+    try {
+      info = await window.fastmike.printerPaper(name);
+    } catch (err) {
+      info = { error: err.message };
+    }
+    FM.printers.setPaper(name, info);
+    renderPrintBar();
+    return info;
+  }
+
+  function refreshAllPaper() {
+    FM.printers.list().forEach((p) => { refreshPaper(p.name); });
+  }
+
   async function loadPrinters() {
     if (!DESKTOP) {
       FM.people.load({});
@@ -1430,6 +1518,9 @@
     renderOriginals();
     renderEdited();
     syncFolderButton();
+
+    // deliberately not awaited - the app is usable while the drivers answer
+    refreshAllPaper();
   }
 
   /**
@@ -1440,12 +1531,36 @@
     if (!DESKTOP) return toast('Printer setup is in the desktop build', true);
 
     const inUse = FM.printers.list();
+
+    /** The one line that says whether this machine will cut 6x8 or ruin it. */
+    function paperLine(p) {
+      const info = FM.printers.paperFor(p.name);
+      if (!info) return '<span class="pset-paper">reading the paper size…</span>';
+      if (info.error) {
+        return '<span class="pset-paper unknown" title="' + escapeHtml(info.error) +
+               '">paper size unknown</span>';
+      }
+      const cur = info.current;
+      const ok = FM.printers.isTargetPaper(cur);
+      return '<span class="pset-paper ' + (ok ? 'good' : 'bad') + '">Paper ' +
+        escapeHtml(FM.printers.paperLabel(cur)) +
+        (cur && cur.name ? ' · ' + escapeHtml(cur.name) : '') +
+        (ok ? '' : ' — the photos are 6 × 8 in') + '</span>';
+    }
+
     const rows = inUse.map((p) => `
       <div class="pset-row" data-name="${escapeHtml(p.name)}">
         <div class="pset-main">
           <input type="text" class="sheet-input pset-label" maxlength="22"
                  value="${escapeHtml(p.label)}" title="What the button says">
           <div class="pset-sub" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+          <div class="pset-paperline">${paperLine(p)}
+            <button class="btn btn-ghost sm pset-recheck">Check again</button>
+          </div>
+          <label class="check pset-auto-lbl"
+                 title="Some photo drivers ignore a page size sent by the app and keep their own cut length. Tick this and the app stops sending one - whatever the driver is set to is what comes out.">
+            <input type="checkbox" class="pset-auto" ${p.auto ? 'checked' : ''}> let the printer choose the page size
+          </label>
         </div>
         <label class="check" title="Off means the Windows print dialog opens every time">
           <input type="checkbox" class="pset-silent" ${p.silent !== false ? 'checked' : ''}> straight to the printer
@@ -1475,6 +1590,16 @@
           row.querySelector('.pset-silent').addEventListener('change', (e) => {
             FM.printers.setSilent(name, e.target.checked);
             saveSettings();
+          });
+          row.querySelector('.pset-auto').addEventListener('change', (e) => {
+            FM.printers.setAuto(name, e.target.checked);
+            saveSettings();
+          });
+          row.querySelector('.pset-recheck').addEventListener('click', async (e) => {
+            e.target.disabled = true;
+            e.target.textContent = 'Checking…';
+            await refreshPaper(name);
+            openPrinterSetup();
           });
           row.querySelector('.pset-del').addEventListener('click', () => {
             FM.printers.remove(name);
@@ -1630,6 +1755,7 @@
     toggleBranch, openAllBranches,
     showPeek, hidePeek, peekOf: () => peekOf,
     renderPrintBar, openPrinterSetup, askCopies, saveSettings, loadPrinters,
+    doPrint, refreshPaper, refreshAllPaper, paperWaved,
     printerList: () => printerList,
     setPrinterList: (l) => { printerList = l; },
     renderScale: () => renderScale,

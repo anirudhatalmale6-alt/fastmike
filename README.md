@@ -150,6 +150,40 @@ leave a sliver of unprinted paper along one edge.
 
 6:8 is the same 3:4 ratio as 15:20, so the crop frame on screen is unaffected.
 
+### The driver decides where the roll is cut
+
+A dye-sub roll is 6 inches wide, and **the Windows driver — not this app — decides
+whether it is cut at 4 inches or at 8**. Set to 6 × 4 the driver shrinks the 6 × 8
+page FastMike sends so it fits, and pads the two long sides with white. The print
+comes out small and bordered, and a sheet of media is gone.
+
+So FastMike reads that setting and shows it:
+
+- the paper is listed against each machine in **Printers…**, green when it is 6 × 8
+  and red when it is not, with **Check again** after changing it in Windows
+- a Print button whose printer is on the wrong paper is marked, and carries the
+  size it is actually on
+- pressing it stops with the four Windows clicks that fix it, and a **Print anyway**
+  if that is really what is wanted. Waving one printer through lasts for that
+  session and does not cover the other machine
+
+Setting it right in Windows, once per printer:
+
+1. Start → **Devices and Printers**
+2. right-click the printer → **Printing preferences**
+3. **Paper Size** → **6 × 8** (drivers write it as `(6x8)`, `PC 6x8` or `152x203mm`),
+   and **Border** → **Borderless** if that is offered
+4. back in FastMike, **Check again**
+
+The reading is never saved to disk — it is whatever the driver is on right now, so
+it is re-read every time the app starts. A driver that will not answer reads as
+*paper size unknown*, and unknown never blocks a print.
+
+**let the printer choose the page size** — a per-printer tick in *Printers…*. Some
+photo drivers ignore a page size sent by an application and keep their own cut
+length regardless. With this on, FastMike stops sending one and whatever the driver
+is set to is what comes out. Leave it off unless a printer is ignoring the size.
+
 ## Several photographers on one laptop
 
 Each photographer gets a tab along the top. A tab holds **his own imported photos, his

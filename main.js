@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
+const { paperScript, parsePaperOutput } = require('./paper');
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tif', '.tiff']);
 
@@ -266,12 +268,47 @@ ipcMain.handle('print:list', async () => {
   }));
 });
 
+/* ------------------------------------------------------------------ */
+/* Paper                                                               */
+/*                                                                     */
+/* Which paper the driver is set to - see paper.js for why this        */
+/* matters enough to shell out to PowerShell for it.                   */
+/* ------------------------------------------------------------------ */
+
+ipcMain.handle('print:paper', async (_e, printer) => {
+  if (process.platform !== 'win32') {
+    return { error: 'The paper setting can only be read on Windows' };
+  }
+  if (!printer) return { error: 'No printer given' };
+
+  const encoded = Buffer.from(paperScript(printer), 'utf16le').toString('base64');
+  return new Promise((resolve) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+      // windowsHide keeps a console window from flashing up mid-event
+      { timeout: 15000, windowsHide: true, maxBuffer: 1024 * 1024 },
+      (err, stdout) => {
+        if (err && !String(stdout).trim()) {
+          return resolve({ error: 'Could not read the printer settings: ' + err.message });
+        }
+        resolve(parsePaperOutput(stdout));
+      }
+    );
+  });
+});
+
 /**
  * Prints one or more already-rendered print-ready images.
  * Each image is laid out on its own page at exactly widthMm x heightMm,
  * borderless, so the printer driver does not rescale the crop.
+ *
+ * `pageSize: false` hands that decision back to the driver instead. Some photo
+ * drivers ignore a custom page size altogether and keep their own cut length,
+ * and then scale our page down to it - so there has to be a way to stop asking.
  */
-ipcMain.handle('print:images', async (_e, { images, widthMm, heightMm, printer, silent, copies }) => {
+ipcMain.handle('print:images', async (_e, { images, widthMm, heightMm, printer, silent, copies, pageSize }) => {
+  const askSize = pageSize !== false;
   const pages = images
     .map(
       (d) =>
@@ -281,7 +318,7 @@ ipcMain.handle('print:images', async (_e, { images, widthMm, heightMm, printer, 
 
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
-  @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+  @page { size: ${askSize ? `${widthMm}mm ${heightMm}mm` : 'auto'}; margin: 0; }
   html, body { margin: 0; padding: 0; background: #fff; }
   .page {
     width: ${widthMm}mm; height: ${heightMm}mm;
@@ -307,9 +344,11 @@ ipcMain.handle('print:images', async (_e, { images, widthMm, heightMm, printer, 
     printBackground: true,
     color: true,
     margins: { marginType: 'none' },
-    copies: copies || 1,
-    pageSize: { width: Math.round(widthMm * 1000), height: Math.round(heightMm * 1000) }
+    copies: copies || 1
   };
+  if (askSize) {
+    opts.pageSize = { width: Math.round(widthMm * 1000), height: Math.round(heightMm * 1000) };
+  }
   if (printer) opts.deviceName = printer;
 
   return new Promise((resolve) => {

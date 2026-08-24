@@ -27,13 +27,17 @@ contextBridge.exposeInMainWorld('fastmike', {
   setSettings: (v) => ipcRenderer.invoke('settings:set', v),
 
   listPrinters: () => ipcRenderer.invoke('print:list'),
+  printerPaper: (name) => ipcRenderer.invoke('print:paper', name),
   printImages: (payload) => ipcRenderer.invoke('print:images', payload),
 
-  // Electron 32 removed File.path; this is the supported replacement and is
+  // Electron 32 removed File.path; webUtils is the supported replacement and is
   // what lets drag-and-drop use the on-disk file rather than a memory copy.
+  // The Windows 7 build runs Electron 22, which has no webUtils but still has
+  // File.path - so dragging photos in reads from disk on both.
   pathForFile: (file) => {
     try {
-      return webUtils && webUtils.getPathForFile ? webUtils.getPathForFile(file) : null;
+      if (webUtils && webUtils.getPathForFile) return webUtils.getPathForFile(file);
+      return (file && file.path) || null;
     } catch (_) {
       return null;
     }

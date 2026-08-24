@@ -230,6 +230,35 @@ button, input, select { font: inherit; color: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the paper the driver is actually set to - the one line worth reading here */
+.pset-row { align-items: flex-start; }
+.pset-row > .check, .pset-row > .btn { margin-top: 4px; }
+.pset-paperline { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pset-paper { font-size: 11px; }
+.pset-paper.good { color: #4c9a5b; }
+.pset-paper.bad { color: #d05b45; font-weight: 600; }
+.pset-paper.unknown { color: #5f5f5f; }
+.pset-auto-lbl { margin-top: 6px; font-size: 11px; color: #5f5f5f; }
+
+/* the warning that stands between him and a ruined sheet of media */
+.warn-lead { margin: 0 0 10px; font-size: 14px; }
+.warn-lead b { color: #d05b45; }
+.steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; line-height: 1.9; color: #cfcfcf; }
+.sheet-actions { display: flex; gap: 8px; }
+
+/* a print button whose printer is on the wrong paper says so on its face.
+ * The bar clips long printer names at 220px - the flag is the whole point of
+ * the button in this state, so it gets the room to stay readable. */
+.btn-red.paper-bad { background: #8a4030; }
+.printbar .btn-red.paper-bad { max-width: 320px; }
+.paper-flag {
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, .3);
+  font-size: 10px;
+}
+
 .pset-add { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 .pset-add select {
   flex: 1;
