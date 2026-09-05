@@ -27,7 +27,8 @@ window.FM = window.FM || {};
       zoom: 1,          // 1 = photo exactly covers the crop frame
       tx: 0,            // pan, in frame widths
       ty: 0,
-      landscape: false  // frame orientation, not photo rotation
+      // frame orientation, not photo rotation - starts across, see crop.js
+      landscape: FM.crop.DEFAULT_LANDSCAPE
     };
   }
 

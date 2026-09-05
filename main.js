@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { paperScript, parsePaperOutput } = require('./paper');
+const { printHtml, pageSizeMicrons } = require('./printhtml');
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tif', '.tiff']);
 
@@ -309,24 +310,7 @@ ipcMain.handle('print:paper', async (_e, printer) => {
  */
 ipcMain.handle('print:images', async (_e, { images, widthMm, heightMm, printer, silent, copies, pageSize }) => {
   const askSize = pageSize !== false;
-  const pages = images
-    .map(
-      (d) =>
-        `<div class="page"><img src="${d}"></div>`
-    )
-    .join('');
-
-  const html = `<!doctype html>
-<html><head><meta charset="utf-8"><style>
-  @page { size: ${askSize ? `${widthMm}mm ${heightMm}mm` : 'auto'}; margin: 0; }
-  html, body { margin: 0; padding: 0; background: #fff; }
-  .page {
-    width: ${widthMm}mm; height: ${heightMm}mm;
-    page-break-after: always; overflow: hidden;
-  }
-  .page:last-child { page-break-after: auto; }
-  .page img { width: 100%; height: 100%; display: block; object-fit: fill; }
-</style></head><body>${pages}</body></html>`;
+  const html = printHtml(images, widthMm, heightMm, askSize);
 
   const job = new BrowserWindow({
     show: false,
@@ -347,7 +331,8 @@ ipcMain.handle('print:images', async (_e, { images, widthMm, heightMm, printer, 
     copies: copies || 1
   };
   if (askSize) {
-    opts.pageSize = { width: Math.round(widthMm * 1000), height: Math.round(heightMm * 1000) };
+    // always the sheet the printer is loaded with, never a rotated one
+    opts.pageSize = pageSizeMicrons(widthMm, heightMm);
   }
   if (printer) opts.deviceName = printer;
 

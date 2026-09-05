@@ -55,7 +55,7 @@ Everything else is identical.
 | **Centre — Editing Area** | Large preview with the **fixed** 15×20 crop frame. The frame never moves — the photo moves behind it, and everything outside it is hidden, so what you see is exactly what prints. |
 | **Bottom — Edited Photos** | Print-ready versions, five across, two rows. Each has its own print button. |
 | **Right — Adjustments** | Brightness, Highlights, Contrast, Shadows. Each has a slider and its own circular reset icon. |
-| **Right — Frame** | Rotate Frame 90°, switching between 15×20 portrait and 20×15 landscape. |
+| **Right — Frame** | Rotate Frame 90°, switching between 20×15 landscape — where every photo starts — and 15×20 portrait. |
 
 ## Crop
 
@@ -65,8 +65,13 @@ The frame is fixed at the 15×20 ratio and never moves. The photograph does.
 - **Mouse wheel** to zoom — the photo zooms **around the pointer**, so you scroll
   in on a face rather than on the middle of the frame
 - **Double-click** or **Fit** to reset
-- **Rotate Frame 90°** switches the frame between portrait and landscape. The
+- **Rotate Frame 90°** switches the frame between landscape and portrait. The
   frame rotates; the photograph is never rotated.
+
+Every photo **starts in the landscape frame**. Event work is shot horizontally far
+more often than not, so starting upright meant turning almost every frame by hand.
+Press `R` to stand a single photo up; that choice stays with that photo, and the
+next photo you import still starts across.
 
 The photo can never be panned or zoomed out far enough to expose an edge, so prints
 never come out with a white strip.
@@ -129,6 +134,13 @@ without interrupting what you are editing.
 Each photo is laid out on its own page at exactly its own size with zero margins, so
 the printer driver never rescales the crop. Portrait and landscape photos are sent as
 separate jobs, because a single job cannot mix page sizes.
+
+**Both orientations go out on the same 6×8 sheet.** A dye-sub roll has one shape —
+6 inches across, cut to 8 inches long — and the driver has no 8×6 form at all. Asking
+for one gets the page shrunk to fit onto 6×8 with white bands down two sides, which is
+exactly the fault this printer had. A landscape print is therefore sent as a 6×8 page
+with the photo turned a quarter turn on it, which is what a landscape print physically
+is. The driver is only ever asked for the paper it actually has.
 
 Printing never blocks editing. Jobs go onto a queue and are handed out in the
 background while you carry on editing.

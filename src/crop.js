@@ -2,7 +2,8 @@
  * ---------------------------------------------------------------------------
  * FastMike works in one print format: 15x20 cm. The frame is fixed on screen
  * and the photograph moves behind it. Rotating switches the FRAME between
- * 15x20 portrait and 20x15 landscape - the photograph itself is never rotated.
+ * 20x15 landscape - where every photo starts - and 15x20 portrait. The
+ * photograph itself is never rotated.
  *
  * All geometry lives here so the preview, the print render and the pan limits
  * can never disagree about where the crop is.
@@ -29,16 +30,27 @@ window.FM = window.FM || {};
   const LONG_MM = LONG_IN * 25.4;     // 203.2
   const MAX_ZOOM = 5;
 
+  /* The orientation every photo starts in. Event work is shot horizontally far
+   * more often than not, so starting upright meant rotating almost every frame
+   * by hand. R still flips any single photo, and that choice stays with it.
+   */
+  const DEFAULT_LANDSCAPE = true;
+
+  /** Frame orientation of a photo, or the starting one when there is no photo. */
+  function isLandscape(photo) {
+    return photo && photo.state ? !!photo.state.landscape : DEFAULT_LANDSCAPE;
+  }
+
   /** Page size in millimetres for a photo, honouring its frame rotation. */
   function pageMm(photo) {
-    return photo && photo.state.landscape
+    return isLandscape(photo)
       ? { w: LONG_MM, h: SHORT_MM }
       : { w: SHORT_MM, h: LONG_MM };
   }
 
-  /** Output size in pixels - 1800 x 2400, the native 6x8 page of these printers. */
+  /** Output size in pixels - 2400 x 1800 across, 1800 x 2400 upright. */
   function printPixels(photo) {
-    const land = photo && photo.state.landscape;
+    const land = isLandscape(photo);
     return {
       w: Math.round((land ? LONG_IN : SHORT_IN) * DPI),
       h: Math.round((land ? SHORT_IN : LONG_IN) * DPI)
@@ -125,8 +137,8 @@ window.FM = window.FM || {};
   }
 
   FM.crop = {
-    SHORT_IN, LONG_IN, SHORT_MM, LONG_MM, DPI, MAX_ZOOM,
-    pageMm, printPixels, frameIn, photoRect, clampPan, zoomBy, fit
+    SHORT_IN, LONG_IN, SHORT_MM, LONG_MM, DPI, MAX_ZOOM, DEFAULT_LANDSCAPE,
+    isLandscape, pageMm, printPixels, frameIn, photoRect, clampPan, zoomBy, fit
   };
 
 })(window.FM);

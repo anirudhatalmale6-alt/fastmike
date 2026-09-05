@@ -68,6 +68,7 @@
     printBar: $('printBar'),
     webPicker: $('webFilePicker'),
     frameFormat: $('frameFormat'),
+    paperNote: $('paperNote'),
     modal: $('modal'),
     modalTitle: $('modalTitle'),
     modalBody: $('modalBody'),
@@ -1072,10 +1073,19 @@
   }
 
   function syncFrameLabel() {
-    const p = current();
-    el.frameFormat.textContent = p && p.state.landscape
-      ? '20 × 15 landscape'
-      : '15 × 20 portrait';
+    const land = FM.crop.isLandscape(current());
+    el.frameFormat.textContent = land ? '20 × 15 landscape' : '15 × 20 portrait';
+
+    /* The pixels change with the turn; the media never does. Saying "paper
+     * 8 x 6" here would read as a second paper size to go and find, and paper
+     * sizes are exactly what went wrong on his first test print - so the note
+     * names the one sheet that is always right and lets the photo turn on it.
+     */
+    if (el.paperNote) {
+      const px = FM.crop.printPixels(current());
+      el.paperNote.textContent = 'Photo ' + px.w + ' × ' + px.h +
+        ' px at 300 dpi · paper 15 × 20 cm (6 × 8 in)';
+    }
   }
 
   /* --------------------------------------------------------- edited photos */
