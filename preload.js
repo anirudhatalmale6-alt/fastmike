@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('fastmike', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (v) => ipcRenderer.invoke('settings:set', v),
 
+  // one shared log file, so a single attachment tells the whole story
+  log: (tag, msg) => ipcRenderer.invoke('diag:log', tag, msg),
+  logPath: () => ipcRenderer.invoke('diag:path'),
+
   listPrinters: () => ipcRenderer.invoke('print:list'),
   printerPaper: (name) => ipcRenderer.invoke('print:paper', name),
   printImages: (payload) => ipcRenderer.invoke('print:images', payload),

@@ -382,6 +382,35 @@ src/app.js       interface, state and event wiring
 Each concern lives in its own file so a change to, say, batching cannot disturb the
 crop maths.
 
+## The log file
+
+FastMike keeps a plain text log called **FastMike-log.txt**, written into the same
+folder as the program itself — so if the program sits on the desktop, the log sits
+next to it. If that folder cannot be written to, it falls back to the Windows
+application data folder, and then to the temporary folder; whichever it chose is
+shown on the **F2** panel and named in the header of the file.
+
+It records the start of each run with the version, the engine and the machine's
+memory, then every folder read and every import with how long it took and how many
+photographs arrived. Anything skipped is named.
+
+It also records the ways the program can stop:
+
+| Written as | What happened |
+|---|---|
+| `CRASH … reason=oom` | it ran out of memory — usually too many photographs at once |
+| `CRASH … reason=crashed` | the window stopped unexpectedly |
+| `CRASH … reason=killed` | something outside stopped it, which is normally antivirus |
+| `HANG` | the window stopped responding, and whether it recovered |
+| `PAGE-ERR` | something went wrong inside the window |
+
+All of these also put a message on screen naming the log file, rather than the
+program simply disappearing. Runs are appended one after another, so a crash is
+still in the file after restarting; once the file passes two megabytes the oldest
+part is dropped and the end kept.
+
+---
+
 ## Not built yet
 
 Sections 17–18 of the specification (multiple photographers, one tab each, a printer

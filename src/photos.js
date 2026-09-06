@@ -100,17 +100,47 @@ window.FM = window.FM || {};
   }
 
   /**
+   * Let go of a decoded photograph.
+   *
+   * A 24 megapixel JPEG is around 96 MB once it is decoded, and dropping the
+   * last reference is not the same as the memory coming back - the browser
+   * holds decoded images in a cache of its own. Clearing the source is what
+   * actually releases it. Over a folder of several hundred frames that is the
+   * difference between importing and running out of memory partway through.
+   */
+  function release(img) {
+    try {
+      if (img && 'src' in img) img.src = '';
+      else if (img && img.close) img.close();
+    } catch (_) {
+      // releasing early is an optimisation; never let it break an import
+    }
+  }
+
+  /**
    * Turn import entries into photo records.
    * entry is {name, path, group} on the desktop or {name, url} in a browser.
+   *
+   * onStep is called before each photograph. Importing a full evening's shoot
+   * takes real time, and a window that shows nothing while it works is
+   * indistinguishable from one that has hung - which is exactly how it gets
+   * reported.
    */
-  async function build(entries, nextId) {
+  async function build(entries, nextId, onStep) {
     const made = [];
     let failed = 0;
+    let i = 0;
 
     for (const entry of entries) {
+      if (onStep) {
+        try {
+          if (onStep(++i, entries.length, entry) === false) break;   // cancelled
+        } catch (_) { /* progress must never stop the import */ }
+      }
+      let img = null;
       try {
         // decoded once here for the thumbnail, then released - see openImage()
-        const img = await openImage(entry);
+        img = await openImage(entry);
         const d = dimsOf(img);
         made.push({
           id: nextId(),
@@ -126,7 +156,16 @@ window.FM = window.FM || {};
         });
       } catch (err) {
         failed++;
+        if (window.fastmike && window.fastmike.log) {
+          window.fastmike.log('IMPORT', 'skipped ' + entry.name + ': ' +
+                                        (err && err.message ? err.message : err));
+        }
+      } finally {
+        release(img);
       }
+      // hand the frame back so the count on screen moves and the memory just
+      // released is actually collected before the next photograph is decoded
+      await new Promise((r) => setTimeout(r, 0));
     }
     return { made, failed };
   }

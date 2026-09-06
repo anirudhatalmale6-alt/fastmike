@@ -4,3 +4,6 @@ out/
 .DS_Store
 Thumbs.db
 *.log
+
+# written at runtime next to the exe, never part of the source
+FastMike-log.txt

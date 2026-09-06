@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { paperScript, parsePaperOutput } = require('./paper');
 const { printHtml, pageSizeMicrons } = require('./printhtml');
+const diag = require('./diag');
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tif', '.tiff']);
 
@@ -53,10 +54,18 @@ function createWindow() {
 
   win.setMenuBarVisibility(false);
   win.once('ready-to-show', () => win.show());
+  diag.attachWindow(win);
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  diag.line('APP', 'window created');
 }
 
+/* The log is opened before anything else can fail, so that a failure during
+ * startup is still written down. */
+diag.start(app, { version: app.getVersion() });
+diag.watch(app, dialog, () => win);
+
 app.whenReady().then(() => {
+  diag.line('APP', 'ready');
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -71,19 +80,26 @@ app.on('window-all-closed', () => {
 /* Import                                                              */
 /* ------------------------------------------------------------------ */
 
-function listImages(dir) {
-  return fs
-    .readdirSync(dir)
+/* Reading a folder is done off the main thread from here on.
+ *
+ * readdirSync blocks the whole application, including painting: a folder on a
+ * memory card, a camera still writing to it, or a network drive that has gone
+ * to sleep will stop the window dead, and Windows then offers to close the
+ * program that is "not responding". Nothing about that looks like a slow disk
+ * from the outside - it looks like the app froze and closed itself. */
+async function listImages(dir) {
+  const names = await fs.promises.readdir(dir);
+  return names
     .filter((f) => IMAGE_EXT.has(path.extname(f).toLowerCase()))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
     .map((f) => ({ name: f, path: path.join(dir, f) }));
 }
 
 /** The folders directly inside dir, in the order a file browser would show them. */
-function subFolders(dir) {
+async function subFolders(dir) {
   try {
-    return fs
-      .readdirSync(dir, { withFileTypes: true })
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    return entries
       .filter((d) => d.isDirectory() && d.name[0] !== '.')
       .map((d) => d.name)
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -109,15 +125,15 @@ function subFolders(dir) {
 const MAX_DEPTH = 2;
 const MAX_DIRS = 300;
 
-function listTree(dir) {
+async function listTree(dir) {
   const files = [];
   const groups = [];
   let seen = 0;
 
-  const walk = (at, rel, depth) => {
+  const walk = async (at, rel, depth) => {
     let inside = [];
     try {
-      inside = listImages(at);
+      inside = await listImages(at);
     } catch (_) {
       return;                         // unreadable folder - skip, do not fail
     }
@@ -126,13 +142,16 @@ function listTree(dir) {
       files.push(...inside.map((f) => Object.assign({ group: rel }, f)));
     }
     if (depth >= MAX_DEPTH) return;
-    for (const name of subFolders(at)) {
+    for (const name of await subFolders(at)) {
       if (++seen > MAX_DIRS) return;
-      walk(path.join(at, name), rel ? rel + '/' + name : name, depth + 1);
+      await walk(path.join(at, name), rel ? rel + '/' + name : name, depth + 1);
     }
   };
 
-  walk(dir, '', 0);
+  const began = Date.now();
+  await walk(dir, '', 0);
+  diag.line('IMPORT', 'read ' + dir + ' - ' + files.length + ' photos in ' +
+                      groups.length + ' folders, ' + (Date.now() - began) + 'ms');
 
   // the folder itself only earns a row of its own when it holds photographs
   if (groups.length && groups[0].name === '' && !groups[0].count) groups.shift();
@@ -190,8 +209,9 @@ ipcMain.handle('import:folder', async () => {
   const dir = res.filePaths[0];
   if (!dir) return null;
   try {
-    return Object.assign({ dir }, listTree(dir));
+    return Object.assign({ dir }, await listTree(dir));
   } catch (err) {
+    diag.line('IMPORT', 'could not read ' + dir + ': ' + diag.describe(err));
     return { dir, files: [], groups: [], error: 'Could not read ' + dir + ': ' + err.message };
   }
 });
@@ -206,12 +226,26 @@ ipcMain.handle('import:folder', async () => {
  */
 ipcMain.handle('import:folder-at', async (_e, dir) => {
   try {
-    if (!fs.statSync(dir).isDirectory()) return { dir, files: [], groups: [], missing: true };
-    return Object.assign({ dir }, listTree(dir));
+    const st = await fs.promises.stat(dir);
+    if (!st.isDirectory()) return { dir, files: [], groups: [], missing: true };
+    return Object.assign({ dir }, await listTree(dir));
   } catch (_) {
     return { dir, files: [], groups: [], missing: true };
   }
 });
+
+/**
+ * The page's own line in the log.
+ *
+ * Import happens in the window, so the record of how far it got has to come
+ * from there. Same file as everything else, so one attachment tells the story.
+ */
+ipcMain.handle('diag:log', (_e, tag, msg) => {
+  diag.line(String(tag || 'PAGE').slice(0, 12), String(msg).slice(0, 2000));
+  return true;
+});
+
+ipcMain.handle('diag:path', () => diag.logPath());
 
 /* ------------------------------------------------------------------ */
 /* Save / export                                                       */

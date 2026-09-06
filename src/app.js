@@ -91,13 +91,41 @@
   /* --------------------------------------------------------------- toast */
 
   let toastTimer = null;
-  function toast(msg, isErr) {
+  /* `stay` holds the message up until something replaces it - for work that
+   * takes longer than a message is normally shown for, like reading a folder. */
+  function toast(msg, isErr, stay) {
     el.toast.textContent = msg;
     el.toast.className = 'toast' + (isErr ? ' err' : '');
     el.toast.hidden = false;
     clearTimeout(toastTimer);
+    if (stay) return;
     toastTimer = setTimeout(() => { el.toast.hidden = true; }, isErr ? 5000 : 2000);
   }
+
+  /* ------------------------------------------------------- the log file */
+
+  /**
+   * Write a line into the same log the desktop side writes to.
+   *
+   * Quiet by design: if there is no log file there is nothing to say about it,
+   * and logging must never be the reason something fails.
+   */
+  function logToFile(tag, msg) {
+    try {
+      if (window.fastmike && window.fastmike.log) window.fastmike.log(tag, msg);
+    } catch (_) { /* never let bookkeeping break the app */ }
+  }
+
+  /* Anything the page throws goes to the file too. Errors that reach here have
+   * always been invisible - the window simply stops doing what was asked. */
+  window.addEventListener('error', (e) => {
+    logToFile('PAGE', 'error: ' + (e.message || e.type) +
+                      ' at ' + (e.filename || '?') + ':' + (e.lineno || 0));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e && e.reason;
+    logToFile('PAGE', 'unhandled: ' + ((r && (r.stack || r.message)) || String(r)));
+  });
 
   /* --------------------------------------------------------------- modal */
 
@@ -264,14 +292,51 @@
       '  (scale ' + renderScale.toFixed(2) + ')' +
       '\npreview image: ' + d +
       '\noriginal: ' + (p ? p.w + '×' + p.h : '—') +
-      '\nscreen scaling: ' + (window.devicePixelRatio || 1);
+      '\nscreen scaling: ' + (window.devicePixelRatio || 1) +
+      '\nphotos loaded: ' + app.photos.length +
+      (logFilePath ? '\nlog file: ' + logFilePath : '');
+  }
+
+  /* Where the log is being written. Shown on F2 so that "send me the log" can
+   * be answered without anyone having to go looking through Windows for it. */
+  let logFilePath = '';
+  if (window.fastmike && window.fastmike.logPath) {
+    Promise.resolve(window.fastmike.logPath())
+      .then((p) => { logFilePath = p || ''; })
+      .catch(() => {});
   }
 
   /* --------------------------------------------------------------- import */
 
+  /**
+   * Bring photographs in, saying how far it has got.
+   *
+   * A folder from a full evening can hold several hundred frames and each one
+   * has to be decoded to make its thumbnail, so this is the one part of the
+   * app that takes minutes rather than moments. Without a count on screen it
+   * looks like the program has stopped - and a program that looks stopped gets
+   * closed by hand, halfway through.
+   */
   async function addPhotos(entries) {
     if (!entries || !entries.length) return;
-    const { made, failed } = await FM.photos.build(entries, () => nextId('p'));
+
+    logToFile('IMPORT', 'importing ' + entries.length + ' photos');
+    /* Anything past a handful is worth counting out loud. A 24 megapixel frame
+     * takes a moment to decode on a laptop, so even a small folder can outlast
+     * anyone's patience with a window that is saying nothing. */
+    const many = entries.length > 5;
+    if (many) toast('Reading photos 1 of ' + entries.length, false, true);
+
+    const began = Date.now();
+    const { made, failed } = await FM.photos.build(entries, () => nextId('p'),
+      (i, total) => {
+        if (many && (i === 1 || i % 5 === 0 || i === total)) {
+          toast('Reading photos ' + i + ' of ' + total, false, true);
+        }
+      });
+    logToFile('IMPORT', 'imported ' + made.length + ' of ' + entries.length +
+                        ', ' + failed + ' skipped, ' + (Date.now() - began) + 'ms');
+
     app.photos.push(...made);
     renderOriginals();
     if (app.selected < 0) {
