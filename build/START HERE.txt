@@ -1,0 +1,38 @@
+FastMike 0.9.1
+==============
+
+There is nothing to install. Everything the program needs is already
+in this folder.
+
+TO RUN IT
+---------
+Double-click  FastMike.exe  in this folder.
+
+The first time, you may want to make a shortcut so you do not have to
+open this folder every night:
+
+  right-click FastMike.exe  ->  Send to  ->  Desktop (create shortcut)
+
+Do NOT drag FastMike.exe itself onto the desktop. Move the whole folder
+or nothing - the .exe cannot run on its own, it needs the files beside it.
+
+
+WHERE TO KEEP THIS FOLDER
+-------------------------
+Anywhere you like, as long as it stays in one piece. A good place is
+
+  C:\FastMike
+
+Keeping it out of the Desktop and out of Downloads also keeps antivirus
+away from it, which is the reason this folder version exists.
+
+
+THE LOG FILE
+------------
+When FastMike runs it writes  FastMike-log.txt  into this same folder.
+If anything goes wrong, send me that file - it says what happened.
+
+Press F2 inside the program and it shows you the exact path to the log,
+in case Windows has put it somewhere else.
+
+- Anirudha
