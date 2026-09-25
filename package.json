@@ -1,11 +1,11 @@
 {
-  "name": "project",
-  "version": "1.0.0",
+  "name": "fastmike",
+  "version": "0.9.1",
   "description": "FastMike - fast photo editing and instant printing for event photographers",
   "main": "main.js",
   "scripts": {
-    "build": "node canary.js && tsc",
-    "prepare": "node canary.js"
+    "start": "electron .",
+    "dist": "electron-builder --win"
   },
   "author": "Anirudha Talmale",
   "license": "UNLICENSED",
